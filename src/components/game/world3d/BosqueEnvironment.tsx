@@ -944,39 +944,62 @@ const WATER_VERT = /* glsl */ `
 `;
 
 function useWaterMaterial(vertical: boolean) {
-  return useMemo(
-    () =>
-      new THREE.ShaderMaterial({
-        transparent: true,
-        depthWrite: false,
-        fog: false,
-        uniforms: {
-          uTime: { value: 0 },
-          uDeep: { value: new THREE.Color(vertical ? "#7fd4e8" : "#1d6a63") },
-          uLight: { value: new THREE.Color(vertical ? "#eafcff" : "#7fe8d8") },
-          uSpeed: { value: vertical ? 3.2 : 0.7 },
-        },
-        vertexShader: WATER_VERT,
-        fragmentShader: /* glsl */ `
-          varying vec2 vUv;
-          uniform float uTime; uniform float uSpeed;
-          uniform vec3 uDeep; uniform vec3 uLight;
-          float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }
-          void main() {
-            float flow = vUv.x * 26.0 - uTime * uSpeed;
-            float band = sin(flow + sin(vUv.y * 9.0 + uTime * 0.8) * 0.9) * 0.5 + 0.5;
-            vec3 col = mix(uDeep, uLight, band * 0.45 + 0.12);
-            // Destellos
-            vec2 cell = floor(vec2(flow * 2.2, vUv.y * 12.0));
-            float tw = step(0.94, hash(cell) * (0.75 + 0.25 * sin(uTime * 3.0 + hash(cell.yx) * 6.28)));
-            col += tw * 0.55;
-            float edge = smoothstep(0.0, 0.12, vUv.y) * smoothstep(1.0, 0.88, vUv.y);
-            gl_FragColor = vec4(col, ${vertical ? "0.85" : "0.93"} * (0.35 + 0.65 * edge));
+  return useMemo(() => {
+    // Fase 7: el río refleja el sol de la tarde (highlight anclado hacia la
+    // dirección de SUN_DIR) y hace espuma ondulante en las orillas.
+    const spec = new THREE.Vector2(0.5 + SUN_DIR.x * 0.32, 0.5 - SUN_DIR.z * 0.32);
+    return new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      fog: false,
+      uniforms: {
+        uTime: { value: 0 },
+        uDeep: { value: new THREE.Color(vertical ? "#7fd4e8" : "#1d6a63") },
+        uLight: { value: new THREE.Color(vertical ? "#eafcff" : "#7fe8d8") },
+        uSpeed: { value: vertical ? 3.2 : 0.7 },
+        uSpec: { value: spec },
+        uGlint: { value: vertical ? 0 : 0.85 },
+        uGlintCol: { value: new THREE.Color("#ffe9b8") },
+        uFoam: { value: vertical ? 0 : 0.55 },
+      },
+      vertexShader: WATER_VERT,
+      fragmentShader: /* glsl */ `
+        varying vec2 vUv;
+        uniform float uTime; uniform float uSpeed;
+        uniform vec3 uDeep; uniform vec3 uLight;
+        uniform vec2 uSpec; uniform float uGlint; uniform vec3 uGlintCol;
+        uniform float uFoam;
+        float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }
+        void main() {
+          float flow = vUv.x * 26.0 - uTime * uSpeed;
+          float band = sin(flow + sin(vUv.y * 9.0 + uTime * 0.8) * 0.9) * 0.5 + 0.5;
+          vec3 col = mix(uDeep, uLight, band * 0.45 + 0.12);
+          // Destellos
+          vec2 cell = floor(vec2(flow * 2.2, vUv.y * 12.0));
+          float tw = step(0.94, hash(cell) * (0.75 + 0.25 * sin(uTime * 3.0 + hash(cell.yx) * 6.28)));
+          col += tw * 0.55;
+          float edge = smoothstep(0.0, 0.12, vUv.y) * smoothstep(1.0, 0.88, vUv.y);
+          float a = ${vertical ? "0.85" : "0.93"} * (0.35 + 0.65 * edge);
+          // Camino de brillo del sol sobre el agua.
+          if (uGlint > 0.0) {
+            vec2 d = vUv - uSpec;
+            d.x *= 1.6;
+            float glow = exp(-dot(d, d) * 14.0);
+            col += uGlintCol * glow * uGlint * (0.35 + band * 0.55 + tw * 0.6);
           }
-        `,
-      }),
-    [vertical],
-  );
+          // Espuma de orillas: banda blanca ondulante en los bordes.
+          if (uFoam > 0.0) {
+            float fEdge = max(smoothstep(0.16, 0.02, vUv.y), smoothstep(0.84, 0.98, vUv.y));
+            float wob = 0.5 + 0.5 * sin(vUv.x * 64.0 + uTime * 1.9 + sin(vUv.x * 17.0 + uTime * 0.7) * 2.2);
+            float f = fEdge * (0.35 + 0.65 * wob) * uFoam;
+            col = mix(col, vec3(1.0), min(1.0, f));
+            a = max(a, f * 0.9);
+          }
+          gl_FragColor = vec4(col, a);
+        }
+      `,
+    });
+  }, [vertical]);
 }
 
 function RiverAndFalls() {
@@ -1460,21 +1483,43 @@ function PortalFrame({ x, z }: { x: number; z: number }) {
 // ---------------------------------------------------------------------------
 function Vegetation({ samples }: { samples: [number, number][] }) {
   const grassTex = useMemo(() => makeGrassTexture(), []);
-  const { grass, flowers, magic } = useMemo(() => {
+  const fernTex = useMemo(() => makeFernTexture(), []);
+  const { grass, flowers, magic, ferns } = useMemo(() => {
     const rnd = mulberry32(77);
     const grass: THREE.Matrix4[] = [];
     const flowers: { m: THREE.Matrix4; c: THREE.Color }[] = [];
     const magic: [number, number, number][] = [];
+    const ferns: { m: THREE.Matrix4; c: THREE.Color }[] = [];
     const M = new THREE.Matrix4();
     const p = new THREE.Vector3();
     const q = new THREE.Quaternion();
     const s = new THREE.Vector3();
     const palette = ["#ff8fb3", "#ffd166", "#c084fc", "#8fd3ff", "#ff8562"].map((c) => new THREE.Color(c));
 
+    // Fase 7: parches de concentración — la hierba y las flores se agolpan en
+    // clusters gaussianos (como en el póster), no en uniforme puro.
+    const clusters = Array.from({ length: 10 }, () => ({
+      x: (rnd() - 0.5) * (HALF * 2 - 8),
+      z: (rnd() - 0.5) * (HALF * 2 - 8),
+      sigma: 2.2 + rnd() * 2.6,
+    }));
+    const samplePos = (): [number, number] => {
+      if (rnd() < 0.62) {
+        const c = clusters[Math.floor(rnd() * clusters.length)];
+        // Box-Muller: radio gaussiano alrededor del centro del parche.
+        const r = c.sigma * Math.sqrt(-2 * Math.log(Math.max(1e-6, 1 - rnd())));
+        const a = rnd() * Math.PI * 2;
+        return [c.x + Math.cos(a) * r, c.z + Math.sin(a) * r];
+      }
+      return [(rnd() - 0.5) * (HALF * 2 - 3), (rnd() - 0.5) * (HALF * 2 - 3)];
+    };
+    const inBounds = (x: number, z: number) => Math.abs(x) < HALF - 1.2 && Math.abs(z) < HALF - 1.2;
+
+    const GRASS_N = scaleCount(1020); // ×3 de densidad (Fase 7)
     let guard = 0;
-    while (grass.length < 340 && guard++ < 4000) {
-      const x = (rnd() - 0.5) * (HALF * 2 - 3);
-      const z = (rnd() - 0.5) * (HALF * 2 - 3);
+    while (grass.length < GRASS_N && guard++ < GRASS_N * 12) {
+      const [x, z] = samplePos();
+      if (!inBounds(x, z)) continue;
       if (Math.abs(z - BOSQUE_RIVER.z) < 2.8) continue;
       if (distToPath(samples, x, z) < 1.3) continue;
       const sc = 0.6 + rnd() * 0.7;
@@ -1484,12 +1529,16 @@ function Vegetation({ samples }: { samples: [number, number][] }) {
       M.compose(p, q, s);
       grass.push(M.clone());
     }
-    // Flores: pradera densa en el claro + salpicadas por el mapa.
+    // Flores: pradera densa en el claro + parches por el mapa.
+    const FLOWER_N = scaleCount(720);
+    const CLARO_N = Math.floor(FLOWER_N * 0.55);
     guard = 0;
-    while (flowers.length < 240 && guard++ < 4000) {
-      const inClaro = flowers.length < 150;
-      const x = inClaro ? (rnd() - 0.5) * 14 : (rnd() - 0.5) * (HALF * 2 - 4);
-      const z = inClaro ? -13 + (rnd() - 0.5) * 11 : (rnd() - 0.5) * (HALF * 2 - 4);
+    while (flowers.length < FLOWER_N && guard++ < FLOWER_N * 12) {
+      const inClaro = flowers.length < CLARO_N;
+      const [px, pz] = inClaro ? [(rnd() - 0.5) * 14, -13 + (rnd() - 0.5) * 11] : samplePos();
+      const x = px;
+      const z = pz;
+      if (!inBounds(x, z)) continue;
       if (Math.abs(z - BOSQUE_RIVER.z) < 2.6) continue;
       if (distToPath(samples, x, z) < 1.1) continue;
       const sc = 0.06 + rnd() * 0.07;
@@ -1499,6 +1548,32 @@ function Vegetation({ samples }: { samples: [number, number][] }) {
       M.compose(p, q, s);
       flowers.push({ m: M.clone(), c: palette[Math.floor(rnd() * palette.length)] });
     }
+    // Fase 7: helechos — matas altas de 3 cartas curvadas en abanico, más
+    // densos al pie de los árboles (clusters) y en la sombra.
+    const fernA = new THREE.Color("#2f6e38");
+    const fernB = new THREE.Color("#6da84e");
+    const FERN_N = scaleCount(78);
+    guard = 0;
+    let placedFerns = 0;
+    while (placedFerns < FERN_N && guard++ < FERN_N * 14) {
+      const [x, z] = samplePos();
+      if (!inBounds(x, z)) continue;
+      if (Math.abs(z - BOSQUE_RIVER.z) < 2.8) continue;
+      if (distToPath(samples, x, z) < 1.5) continue;
+      const y = bosqueGroundHeight(x, z);
+      const baseYaw = rnd() * Math.PI * 2;
+      const mata = 0.7 + rnd() * 0.7;
+      for (let k = 0; k < 3; k++) {
+        const yaw = baseYaw + (k * Math.PI * 2) / 3 + (rnd() - 0.5) * 0.5;
+        p.set(x + Math.cos(yaw) * 0.08, y, z + Math.sin(yaw) * 0.08);
+        q.setFromEuler(new THREE.Euler(-0.22 - rnd() * 0.18, yaw, 0, "YXZ"));
+        const sc = mata * (0.85 + rnd() * 0.3);
+        s.set(sc, sc, sc);
+        M.compose(p, q, s);
+        ferns.push({ m: M.clone(), c: fernA.clone().lerp(fernB, rnd()) });
+      }
+      placedFerns++;
+    }
     // Flores de luz cerca del claro (bloom).
     for (let i = 0; i < 12; i++) {
       const x = -4 + (rnd() - 0.5) * 10;
@@ -1506,7 +1581,7 @@ function Vegetation({ samples }: { samples: [number, number][] }) {
       if (distToPath(samples, x, z) < 1.2) continue;
       magic.push([x, bosqueGroundHeight(x, z) + 0.28, z]);
     }
-    return { grass, flowers, magic };
+    return { grass, flowers, magic, ferns };
   }, [samples]);
 
   const setupPlain = (m: THREE.InstancedMesh | null, list: THREE.Matrix4[]) => {
@@ -1514,6 +1589,19 @@ function Vegetation({ samples }: { samples: [number, number][] }) {
     list.forEach((mat, i) => m.setMatrixAt(i, mat));
     m.instanceMatrix.needsUpdate = true;
   };
+
+  // Carta curvada del helecho: plano con la punta doblada hacia atrás.
+  const fernGeo = useMemo(() => {
+    const g = new THREE.PlaneGeometry(0.7, 1.3, 1, 4);
+    g.translate(0, 0.65, 0);
+    const pos = g.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) {
+      const t = pos.getY(i) / 1.3;
+      pos.setZ(i, pos.getZ(i) + t * t * 0.5);
+    }
+    g.computeVertexNormals();
+    return g;
+  }, []);
 
   return (
     <group>
@@ -1550,6 +1638,21 @@ function Vegetation({ samples }: { samples: [number, number][] }) {
       >
         <icosahedronGeometry args={[1, 0]} />
         <meshStandardMaterial emissive="#ffffff" emissiveIntensity={0.12} roughness={0.8} flatShading />
+      </instancedMesh>
+      {/* Helechos: matas de 3 cartas curvadas (Fase 7). */}
+      <instancedMesh
+        ref={(m) => {
+          if (!m) return;
+          ferns.forEach((f, i) => {
+            m.setMatrixAt(i, f.m);
+            m.setColorAt(i, f.c);
+          });
+          m.instanceMatrix.needsUpdate = true;
+          if (m.instanceColor) m.instanceColor.needsUpdate = true;
+        }}
+        args={[fernGeo, undefined, ferns.length]}
+      >
+        <meshStandardMaterial map={fernTex} alphaTest={0.4} side={THREE.DoubleSide} roughness={1} />
       </instancedMesh>
       {magic.map((p, i) => (
         <group key={i} position={p}>
@@ -1592,6 +1695,8 @@ function Vegetation({ samples }: { samples: [number, number][] }) {
 function GodRays() {
   const spots: [number, number][] = [
     [-6, 9], [2, -2], [-2, -12], [9, -6], [-12, 13],
+    // Fase 7: dos haces más — al pie del coloso oeste y sobre las ruinas.
+    [-15, 2], [12, 1],
   ];
   const refs = useRef<(THREE.Mesh | null)[]>([]);
   const quat = useMemo(() => {
@@ -1649,10 +1754,27 @@ function GroundFog() {
           color, opacity,
         };
       });
+    // Fase 7: capa adicional de niebla de distancia — anillo de billboards
+    // grandes y muy tenues sobre el suelo lejano (espesa la atmósfera).
+    const far = Array.from({ length: 8 }, (_, i) => {
+      const a = (i / 8) * Math.PI * 2 + rnd() * 0.5;
+      const r = HALF + 8 + rnd() * 12;
+      return {
+        x: Math.cos(a) * r,
+        z: Math.sin(a) * r,
+        y: 2.4 + rnd() * 2.2,
+        s: 24 + rnd() * 14,
+        speed: 0.04 + rnd() * 0.05,
+        phase: rnd() * Math.PI * 2,
+        color: "#cfe2c8",
+        opacity: 0.08 + rnd() * 0.05,
+      };
+    });
     return [
       ...mk(7, () => [(rnd() - 0.5) * 44, (rnd() - 0.5) * 44], "#dff0dc", 0.13),
       ...mk(3, () => [(rnd() - 0.5) * 8, -20 + (rnd() - 0.5) * 6], "#a878f0", 0.2),
       ...mk(2, () => [17 + (rnd() - 0.5) * 5, -18 + (rnd() - 0.5) * 4], "#a878f0", 0.2),
+      ...far,
     ];
   }, []);
   const refs = useRef<(THREE.Sprite | null)[]>([]);
@@ -1681,7 +1803,7 @@ function GroundFog() {
 // ---------------------------------------------------------------------------
 function Fireflies() {
   const tex = useMemo(() => makeGlowTexture(), []);
-  const COUNT = 130;
+  const COUNT = scaleCount(195); // Fase 7: +50% de vida ambiental
   const seeds = useMemo(() => {
     const rnd = mulberry32(41);
     return Array.from({ length: COUNT }, () => {
@@ -1754,7 +1876,7 @@ function Fireflies() {
 
 function DustMotes() {
   const tex = useMemo(() => makeGlowTexture(), []);
-  const COUNT = 70;
+  const COUNT = scaleCount(105); // Fase 7: +50%
   const seeds = useMemo(() => {
     const rnd = mulberry32(59);
     return Array.from({ length: COUNT }, () => ({
@@ -1792,7 +1914,7 @@ function DustMotes() {
 }
 
 function FallingLeaves() {
-  const COUNT = 54;
+  const COUNT = scaleCount(80); // Fase 7: +50%
   const seeds = useMemo(() => {
     const rnd = mulberry32(23);
     return Array.from({ length: COUNT }, () => ({

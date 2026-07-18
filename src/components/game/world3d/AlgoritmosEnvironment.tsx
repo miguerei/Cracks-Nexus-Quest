@@ -17,8 +17,10 @@ import {
   buildCurve,
   FlowPlane,
   KitBankRocks,
+  KitFarFog,
   KitGround,
   KitGroundFog,
+  KitLightShafts,
   KitParticles,
   KitPath,
   KitPedestal,
@@ -31,6 +33,7 @@ import {
   KitWalkway,
   makeGroundHeightFn,
   mulberry32,
+  scaleCount,
   vnoise,
 } from "./environmentKit";
 import { getWorldLayout, WORLD_CROSSINGS } from "./worldConfig";
@@ -190,8 +193,9 @@ function CircuitVeins() {
   const traces = useMemo(() => {
     const rnd = mulberry32(SEED + 40);
     const out: { p: [number, number, number]; len: number; rotY: number }[] = [];
+    const N = scaleCount(84); // Fase 7: más vetas (equivalente a la hierba ×density)
     let guard = 0;
-    while (out.length < 54 && guard++ < 700) {
+    while (out.length < N && guard++ < N * 14) {
       const x = (rnd() - 0.5) * (HALF * 2 - 6);
       const z = (rnd() - 0.5) * (HALF * 2 - 6);
       // Fuera del canal de datos y de la senda (evita z-fighting con la cinta).
@@ -246,6 +250,11 @@ export default function AlgoritmosEnvironment() {
         sunDir={ALGORITMOS_SUN}
         sunPow={110}
         halo={0.22}
+        cloudBands={[
+          { count: 3, y: 34, radius: 200, scale: 160, color: "#dcecff", opacity: 0.22, speed: 0.002 },
+          { count: 3, y: 58, radius: 225, scale: 190, color: "#c2d8f2", opacity: 0.16, speed: 0.0014 },
+        ]}
+        cloudSeed={SEED + 20}
       />
       {/* Skyline: dos anillos de torres de datos con ventanas cian. */}
       <KitSkyline
@@ -255,7 +264,7 @@ export default function AlgoritmosEnvironment() {
           { count: 14, radius: 68, spread: 20, hMin: 18, hMax: 36, rMin: 3.5, rMax: 6, color: "#16263e", kind: "box", emissive: "#2563b0", emissiveIntensity: 0.22 },
         ]}
       />
-      <KitGround half={HALF} heightFn={heightFn} colorFn={groundColor} />
+      <KitGround half={HALF} heightFn={heightFn} colorFn={groundColor} detailStyle="placa" detailSeed={SEED + 21} detailRepeat={24} />
       <KitPath
         curve={curve}
         heightFn={heightFn}
@@ -266,7 +275,8 @@ export default function AlgoritmosEnvironment() {
         seed={SEED + 2}
       />
       <CircuitVeins />
-      {/* Canal de datos: corriente cian bajo el puente de luz. */}
+      {/* Canal de datos: corriente cian con reflejo del sol frío y espuma de
+          bits en las orillas, bajo el puente de luz. */}
       <FlowPlane
         width={HALF * 2 + 8}
         length={CROSS.half * 2 + 1.4}
@@ -274,6 +284,10 @@ export default function AlgoritmosEnvironment() {
         deep="#0a2038"
         light="#38bdf8"
         speed={1.15}
+        sunDir={ALGORITMOS_SUN}
+        glint={0.55}
+        glintColor="#dceaff"
+        foam={0.45}
       />
       <KitWalkway
         crossing={CROSS}
@@ -314,7 +328,7 @@ export default function AlgoritmosEnvironment() {
       {/* Chatarra de datos: fragmentos de placa dispersos fuera de la ruta. */}
       <KitScatter
         seed={SEED + 11}
-        count={46}
+        count={scaleCount(70)}
         half={HALF}
         heightFn={heightFn}
         avoid={avoidSpots}
@@ -329,6 +343,36 @@ export default function AlgoritmosEnvironment() {
         sMax={1.1}
         avoidDist={2}
       />
+      {/* Fase 7: hierba de datos — aletas finas emisivas que brotan del suelo. */}
+      <KitScatter
+        seed={SEED + 15}
+        count={scaleCount(60)}
+        half={HALF}
+        heightFn={heightFn}
+        avoid={avoidSpots}
+        crossZ={CROSS.z}
+        crossHalf={CROSS.half + 1.6}
+        geometry={<boxGeometry args={[0.08, 1, 0.4]} />}
+        color="#2a5a8e"
+        colorB="#38709e"
+        emissive="#38bdf8"
+        emissiveIntensity={0.7}
+        sMin={0.4}
+        sMax={0.9}
+        yStretchMin={1}
+        yStretchMax={1.8}
+        sink={0.05}
+        avoidDist={1.5}
+      />
+      {/* Fase 7: haces de luz fría sobre la plaza de datos y el foro. */}
+      <KitLightShafts
+        spots={[[10, 11], [-8, -1]]}
+        sunDir={ALGORITMOS_SUN}
+        color="#bfe4ff"
+        opacity={0.06}
+      />
+      {/* Fase 7: niebla de distancia baja en el perímetro. */}
+      <KitFarFog seed={SEED + 16} color="#9fc8f0" radius={HALF + 9} y={2.2} opacity={0.08} />
       {/* Niebla del Vacío en el altar y el nodo corrupto sellado. */}
       <KitGroundFog
         seed={SEED + 12}
@@ -338,10 +382,10 @@ export default function AlgoritmosEnvironment() {
           { count: 6, cx: 0, cz: CROSS.z, rx: HALF - 4, rz: 2.5, color: "#9fc8f0", opacity: 0.16 },
         ]}
       />
-      {/* Motas de datos que ascienden por toda la ciudadela. */}
+      {/* Motas de datos que ascienden por toda la ciudadela (Fase 7: +50%). */}
       <KitParticles
         seed={SEED + 13}
-        count={120}
+        count={scaleCount(180)}
         rx={HALF - 3}
         rz={HALF - 3}
         yMin={0.4}

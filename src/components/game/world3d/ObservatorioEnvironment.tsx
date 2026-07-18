@@ -18,8 +18,10 @@ import {
   buildCurve,
   FlowPlane,
   KitBankRocks,
+  KitFarFog,
   KitGround,
   KitGroundFog,
+  KitLightShafts,
   KitParticles,
   KitPath,
   KitPedestal,
@@ -33,6 +35,7 @@ import {
   makeGlowTexture,
   makeGroundHeightFn,
   mulberry32,
+  scaleCount,
   vnoise,
 } from "./environmentKit";
 import { getWorldLayout, WORLD_CROSSINGS } from "./worldConfig";
@@ -231,10 +234,16 @@ export default function ObservatorioEnvironment() {
         sunColor="#cdd6ff"
         sunDir={OBSERVATORIO_SUN}
         sunPow={170}
-        halo={0.12}
+        halo={0.16}
         stars={950}
         starColor="#eaf6ff"
         starSeed={SEED + 1}
+        cloudBands={[
+          // Bandas de nebulosa índigo, apenas insinuadas entre las estrellas.
+          { count: 3, y: 40, radius: 210, scale: 190, color: "#8890d8", opacity: 0.1, speed: 0.001 },
+          { count: 3, y: 64, radius: 230, scale: 210, color: "#6a74c8", opacity: 0.08, speed: 0.0007 },
+        ]}
+        cloudSeed={SEED + 20}
       />
       <AnillosOrbitales />
       {/* Agujas astrales lejanas, apenas plateadas. */}
@@ -245,7 +254,7 @@ export default function ObservatorioEnvironment() {
           { count: 9, radius: 74, spread: 18, hMin: 12, hMax: 24, rMin: 3, rMax: 5, color: "#171a38", kind: "box", emissive: "#4a54a8", emissiveIntensity: 0.2, sink: 6 },
         ]}
       />
-      <KitGround half={HALF} heightFn={heightFn} colorFn={groundColor} />
+      <KitGround half={HALF} heightFn={heightFn} colorFn={groundColor} detailStyle="losa" detailSeed={SEED + 21} detailRepeat={24} />
       <KitPath
         curve={curve}
         heightFn={heightFn}
@@ -255,7 +264,8 @@ export default function ObservatorioEnvironment() {
         emissiveIntensity={0.6}
         seed={SEED + 3}
       />
-      {/* El vacío estelar: un río de estrellas bajo el hueco y los bordes. */}
+      {/* El vacío estelar: un río de estrellas bajo el hueco y los bordes,
+          con el claro de luna reflejado (Fase 7). */}
       <FlowPlane
         width={160}
         length={160}
@@ -264,6 +274,9 @@ export default function ObservatorioEnvironment() {
         light="#4a54a8"
         speed={0.18}
         alpha={0.95}
+        sunDir={OBSERVATORIO_SUN}
+        glint={0.4}
+        glintColor="#cdd6ff"
       />
       <KitWalkway
         crossing={CROSS}
@@ -296,7 +309,7 @@ export default function ObservatorioEnvironment() {
       {/* Astrolabios rotos: aros y fragmentos plateados fuera de la ruta. */}
       <KitScatter
         seed={SEED + 11}
-        count={38}
+        count={scaleCount(56)}
         half={HALF}
         heightFn={heightFn}
         avoid={avoidSpots}
@@ -314,7 +327,7 @@ export default function ObservatorioEnvironment() {
       {/* Fragmentos de losa flotados en el borde. */}
       <KitScatter
         seed={SEED + 12}
-        count={30}
+        count={scaleCount(45)}
         half={HALF}
         heightFn={heightFn}
         avoid={avoidSpots}
@@ -327,6 +340,39 @@ export default function ObservatorioEnvironment() {
         sMax={1.1}
         avoidDist={2}
       />
+      {/* Fase 7: agujas de luz astral — brotes índigo emisivos entre las losas. */}
+      <KitScatter
+        seed={SEED + 16}
+        count={scaleCount(40)}
+        half={HALF}
+        heightFn={heightFn}
+        avoid={avoidSpots}
+        crossZ={CROSS.z}
+        crossHalf={CROSS.half + 1.6}
+        geometry={<coneGeometry args={[0.12, 1.3, 4]} />}
+        color="#4a5292"
+        colorB="#6a74c8"
+        emissive="#818cf8"
+        emissiveIntensity={0.8}
+        sMin={0.35}
+        sMax={0.8}
+        yStretchMin={1}
+        yStretchMax={1.7}
+        sink={0.08}
+        avoidDist={1.6}
+      />
+      {/* Fase 7: haz de luna sobre el gran telescopio. */}
+      <KitLightShafts
+        spots={[[11.5, 0.5]]}
+        sunDir={OBSERVATORIO_SUN}
+        color="#cdd6ff"
+        opacity={0.06}
+        radius={3.6}
+        height={17}
+        y={7.5}
+      />
+      {/* Fase 7: bruma índigo sobre el borde de la plataforma. */}
+      <KitFarFog seed={SEED + 17} color="#3a4478" radius={HALF + 8} y={1.4} opacity={0.11} />
       {/* Bruma del Vacío en el altar y la plataforma sellada. */}
       <KitGroundFog
         seed={SEED + 13}
@@ -336,10 +382,10 @@ export default function ObservatorioEnvironment() {
           { count: 5, cx: 0, cz: CROSS.z, rx: HALF - 4, rz: 2.5, color: "#6a74c8", opacity: 0.16 },
         ]}
       />
-      {/* Polvo de estrellas en suspensión por toda la plataforma. */}
+      {/* Polvo de estrellas en suspensión por la plataforma (Fase 7: +50%). */}
       <KitParticles
         seed={SEED + 14}
-        count={130}
+        count={scaleCount(195)}
         rx={HALF - 2}
         rz={HALF - 2}
         yMin={0.4}
@@ -353,7 +399,7 @@ export default function ObservatorioEnvironment() {
       {/* Estrellas fugaces: motas que caen en bucle lejos del centro. */}
       <KitParticles
         seed={SEED + 15}
-        count={24}
+        count={scaleCount(36)}
         rx={HALF + 8}
         rz={HALF + 8}
         yMin={8}

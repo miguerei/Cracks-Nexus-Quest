@@ -17,8 +17,10 @@ import {
   buildCurve,
   FlowPlane,
   KitBankRocks,
+  KitFarFog,
   KitGround,
   KitGroundFog,
+  KitLightShafts,
   KitParticles,
   KitPath,
   KitPedestal,
@@ -30,6 +32,7 @@ import {
   KitVoidAltar,
   KitWalkway,
   makeGroundHeightFn,
+  scaleCount,
   vnoise,
 } from "./environmentKit";
 import { getWorldLayout, WORLD_CROSSINGS } from "./worldConfig";
@@ -227,14 +230,22 @@ export default function CronicasEnvironment() {
   }, []);
   return (
     <group>
+      {/* El atardecer del póster: sol bajo con halo dorado muy presente y
+          bandas de nubes encendidas por debajo. */}
       <KitSky
         zenith="#3a5a8e"
         mid="#e0955e"
         horizon="#f6c878"
         sunColor="#ffd98a"
         sunDir={CRONICAS_SUN}
-        sunPow={60}
-        halo={0.4}
+        sunPow={52}
+        halo={0.52}
+        cloudBands={[
+          { count: 4, y: 22, radius: 195, scale: 175, color: "#ffca82", opacity: 0.34, speed: 0.0018 },
+          { count: 3, y: 42, radius: 220, scale: 200, color: "#f2a86a", opacity: 0.26, speed: 0.0013 },
+          { count: 3, y: 66, radius: 205, scale: 170, color: "#e8c8a8", opacity: 0.18, speed: 0.001 },
+        ]}
+        cloudSeed={SEED + 20}
       />
       {/* Horizonte: dunas suaves y mesetas lejanas doradas. */}
       <KitSkyline
@@ -244,9 +255,10 @@ export default function CronicasEnvironment() {
           { count: 10, radius: 80, spread: 22, hMin: 9, hMax: 17, rMin: 8, rMax: 14, color: "#b8905a", kind: "box", sink: 7 },
         ]}
       />
-      <KitGround half={HALF} heightFn={heightFn} colorFn={groundColor} />
+      <KitGround half={HALF} heightFn={heightFn} colorFn={groundColor} detailStyle="arena" detailSeed={SEED + 21} detailRepeat={30} />
       <KitPath curve={curve} heightFn={heightFn} colorA="#d9b878" colorB="#c2a05c" seed={SEED + 2} />
-      {/* Garganta de arena dorada que fluye lenta bajo el paso de losas. */}
+      {/* Garganta de arena dorada que fluye lenta bajo el paso de losas; el
+          atardecer enciende un camino de brillo y los bordes "rompen" claros. */}
       <FlowPlane
         width={HALF * 2 + 8}
         length={CROSS.half * 2 + 1.6}
@@ -255,6 +267,10 @@ export default function CronicasEnvironment() {
         light="#e8c878"
         speed={0.28}
         alpha={0.96}
+        sunDir={CRONICAS_SUN}
+        glint={0.7}
+        glintColor="#ffd98a"
+        foam={0.3}
       />
       <KitWalkway
         crossing={CROSS}
@@ -285,7 +301,7 @@ export default function CronicasEnvironment() {
       {/* Ruinas menudas tragadas por la arena (fuera de la ruta). */}
       <KitScatter
         seed={SEED + 11}
-        count={40}
+        count={scaleCount(58)}
         half={HALF}
         heightFn={heightFn}
         avoid={avoidSpots}
@@ -299,10 +315,10 @@ export default function CronicasEnvironment() {
         sink={0.3}
         avoidDist={2}
       />
-      {/* Cardos secos del desierto. */}
+      {/* Cardos secos del desierto (Fase 7: ×2.5 con parches). */}
       <KitScatter
         seed={SEED + 12}
-        count={34}
+        count={scaleCount(85)}
         half={HALF}
         heightFn={heightFn}
         avoid={avoidSpots}
@@ -315,6 +331,34 @@ export default function CronicasEnvironment() {
         sMax={0.8}
         avoidDist={1.7}
       />
+      {/* Fase 7: espigas de hierba seca alta en matas junto a los cardos. */}
+      <KitScatter
+        seed={SEED + 15}
+        count={scaleCount(52)}
+        half={HALF}
+        heightFn={heightFn}
+        avoid={avoidSpots}
+        crossZ={CROSS.z}
+        crossHalf={CROSS.half + 1.6}
+        geometry={<coneGeometry args={[0.16, 1.6, 4]} />}
+        color="#c9b070"
+        colorB="#a89058"
+        sMin={0.5}
+        sMax={1}
+        yStretchMin={1.1}
+        yStretchMax={1.9}
+        sink={0.1}
+        avoidDist={1.5}
+      />
+      {/* Fase 7: haces del atardecer entre los obeliscos y sobre el coloso. */}
+      <KitLightShafts
+        spots={[[9, -1], [-13, -4.5]]}
+        sunDir={CRONICAS_SUN}
+        color="#ffd98a"
+        opacity={0.075}
+      />
+      {/* Fase 7: calima dorada en el perímetro. */}
+      <KitFarFog seed={SEED + 16} color="#f0d8a0" radius={HALF + 9} y={2.4} opacity={0.1} />
       <KitGroundFog
         seed={SEED + 13}
         patches={[
@@ -323,10 +367,10 @@ export default function CronicasEnvironment() {
           { count: 6, cx: 0, cz: CROSS.z, rx: HALF - 4, rz: 2.5, color: "#f0d8a0", opacity: 0.16 },
         ]}
       />
-      {/* Polvo dorado en suspensión, encendido por el atardecer. */}
+      {/* Polvo dorado en suspensión, encendido por el atardecer (Fase 7: +50%). */}
       <KitParticles
         seed={SEED + 14}
-        count={95}
+        count={scaleCount(145)}
         rx={HALF - 3}
         rz={HALF - 3}
         yMin={0.5}

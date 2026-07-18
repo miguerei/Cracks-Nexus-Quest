@@ -7,6 +7,8 @@
 // Ruta del layout: playa → estrecho → faro mayor → corales → claro → portal
 // → altar del Vacío.
 
+import { useRef } from "react";
+import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { CylinderCollider, RigidBody } from "@react-three/rapier";
 
@@ -16,8 +18,10 @@ import {
   buildCurve,
   FlowPlane,
   KitBankRocks,
+  KitFarFog,
   KitGround,
   KitGroundFog,
+  KitLightShafts,
   KitParticles,
   KitPath,
   KitPedestal,
@@ -29,6 +33,7 @@ import {
   KitVoidAltar,
   KitWalkway,
   makeGroundHeightFn,
+  scaleCount,
   smoothstep,
   vnoise,
 } from "./environmentKit";
@@ -144,6 +149,35 @@ function FaroRuna({
 }
 
 // ---------------------------------------------------------------------------
+// Fase 7 — Espuma costera: anillo blanco pulsante donde la isla se hunde en
+// el mar (la marea respira contra la costa). Un solo mesh, sin luces.
+// ---------------------------------------------------------------------------
+function EspumaCostera() {
+  const ref = useRef<THREE.Mesh>(null);
+  useFrame((state) => {
+    const t = state.clock.elapsedTime;
+    const m = ref.current;
+    if (!m) return;
+    const k = 1 + Math.sin(t * 0.7) * 0.018;
+    m.scale.set(k, k, 1);
+    (m.material as THREE.MeshBasicMaterial).opacity = 0.09 + (Math.sin(t * 0.7 + 1.2) * 0.5 + 0.5) * 0.09;
+  });
+  return (
+    <mesh ref={ref} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.34, 0]}>
+      <ringGeometry args={[HALF - 2.5, HALF + 2.5, 56]} />
+      <meshBasicMaterial
+        color="#eaf6ff"
+        transparent
+        opacity={0.14}
+        depthWrite={false}
+        blending={THREE.AdditiveBlending}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Entorno raíz del Archipiélago. Debe montarse DENTRO de <Physics>.
 // ---------------------------------------------------------------------------
 export default function LenguasEnvironment() {
@@ -156,7 +190,13 @@ export default function LenguasEnvironment() {
         sunColor="#fff4d6"
         sunDir={LENGUAS_SUN}
         sunPow={100}
-        halo={0.3}
+        halo={0.34}
+        cloudBands={[
+          { count: 4, y: 26, radius: 195, scale: 170, color: "#ffffff", opacity: 0.3, speed: 0.0022 },
+          { count: 3, y: 48, radius: 220, scale: 195, color: "#eef8f2", opacity: 0.22, speed: 0.0016 },
+          { count: 3, y: 70, radius: 205, scale: 165, color: "#d8ecec", opacity: 0.15, speed: 0.0011 },
+        ]}
+        cloudSeed={SEED + 20}
       />
       {/* Islotes lejanos asomando sobre el mar. */}
       <KitSkyline
@@ -166,10 +206,11 @@ export default function LenguasEnvironment() {
           { count: 9, radius: 64, spread: 14, hMin: 6, hMax: 12, rMin: 5, rMax: 9, color: "#3a6e5e", sides: 5, sink: 4.5 },
         ]}
       />
-      <KitGround half={HALF} heightFn={heightFn} colorFn={groundColor} />
+      <KitGround half={HALF} heightFn={heightFn} colorFn={groundColor} detailStyle="hierba" detailSeed={SEED + 21} detailRepeat={28} />
       <KitPath curve={curve} heightFn={heightFn} colorA="#d8c48c" colorB="#c8b276" seed={SEED + 2} />
       {/* El mar: una sola lámina teal que llena el estrecho Y rodea la isla
-          (el borde del terreno se hunde bajo ella). */}
+          (el borde del terreno se hunde bajo ella). Fase 7: camino de brillo
+          del sol marino sobre el agua. */}
       <FlowPlane
         width={170}
         length={170}
@@ -178,7 +219,23 @@ export default function LenguasEnvironment() {
         light="#2dd4bf"
         speed={0.55}
         alpha={0.94}
+        sunDir={LENGUAS_SUN}
+        glint={0.8}
+        glintColor="#fff4d6"
       />
+      {/* Fase 7: franja de marea del estrecho, con espuma rompiendo en ambas
+          orillas del paso. */}
+      <FlowPlane
+        width={HALF * 2 + 6}
+        length={CROSS.half * 2 + 2.4}
+        position={[0, -0.36, CROSS.z]}
+        deep="#14555a"
+        light="#4de0cc"
+        speed={0.7}
+        alpha={0.3}
+        foam={0.65}
+      />
+      <EspumaCostera />
       <KitWalkway
         crossing={CROSS}
         colorA="#a1703f"
@@ -200,10 +257,10 @@ export default function LenguasEnvironment() {
       <KitSealedZone x={LAYOUT.decorSpots.blocked[0]} z={LAYOUT.decorSpots.blocked[1]} seed={SEED + 10} />
       <KitPortalFrame x={LAYOUT.decorSpots.portal[0]} z={LAYOUT.decorSpots.portal[1]} stone="#c8bfa8" stoneDark="#8a9a8a" gemColor="#2dd4bf" />
       <ObstacleShells obstacles={LAYOUT.obstacles} color="#7d8f82" capColor="#a8b8a0" kind="rock" />
-      {/* Jardín de corales: abanicos naranja/rosa fuera de la senda. */}
+      {/* Jardín de corales: abanicos naranja/rosa fuera de la senda (×1.5). */}
       <KitScatter
         seed={SEED + 11}
-        count={44}
+        count={scaleCount(66)}
         half={HALF}
         heightFn={heightFn}
         avoid={avoidSpots}
@@ -220,10 +277,10 @@ export default function LenguasEnvironment() {
         yStretchMax={1.5}
         avoidDist={1.8}
       />
-      {/* Hierbas de marea altas mecidas (estáticas, masa instanciada). */}
+      {/* Hierbas de marea altas mecidas (Fase 7: ×3 de densidad). */}
       <KitScatter
         seed={SEED + 12}
-        count={52}
+        count={scaleCount(155)}
         half={HALF}
         heightFn={heightFn}
         avoid={avoidSpots}
@@ -238,6 +295,15 @@ export default function LenguasEnvironment() {
         yStretchMax={1.6}
         avoidDist={1.6}
       />
+      {/* Fase 7: haces de sol marino sobre el faro mayor y la playa. */}
+      <KitLightShafts
+        spots={[[11.5, 1.5], [-10, 12]]}
+        sunDir={LENGUAS_SUN}
+        color="#fff4d6"
+        opacity={0.065}
+      />
+      {/* Fase 7: bruma de mar abierto sobre el agua lejana. */}
+      <KitFarFog seed={SEED + 16} color="#c8ecec" radius={HALF + 10} y={1.6} opacity={0.1} />
       {/* Bruma marina + Bruma del Vacío en altar y cala sellada. */}
       <KitGroundFog
         seed={SEED + 13}
@@ -247,10 +313,10 @@ export default function LenguasEnvironment() {
           { count: 4, cx: LAYOUT.decorSpots.blocked[0], cz: LAYOUT.decorSpots.blocked[1], rx: 4, rz: 4, color: "#8d78d8", opacity: 0.34 },
         ]}
       />
-      {/* Espuma y salpicaduras sobre las orillas. */}
+      {/* Espuma y salpicaduras sobre las orillas (Fase 7: +50%). */}
       <KitParticles
         seed={SEED + 14}
-        count={90}
+        count={scaleCount(135)}
         cz={CROSS.z}
         rx={HALF - 2}
         rz={4}
@@ -262,10 +328,10 @@ export default function LenguasEnvironment() {
         mode="drift"
         speed={0.8}
       />
-      {/* Motas de luz marina por toda la isla. */}
+      {/* Motas de luz marina por toda la isla (Fase 7: +50%). */}
       <KitParticles
         seed={SEED + 15}
-        count={70}
+        count={scaleCount(105)}
         rx={HALF - 3}
         rz={HALF - 3}
         yMin={0.5}

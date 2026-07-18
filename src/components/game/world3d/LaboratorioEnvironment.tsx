@@ -17,8 +17,10 @@ import {
   buildCurve,
   FlowPlane,
   KitBankRocks,
+  KitFarFog,
   KitGround,
   KitGroundFog,
+  KitLightShafts,
   KitParticles,
   KitPath,
   KitPedestal,
@@ -30,6 +32,7 @@ import {
   KitVoidAltar,
   KitWalkway,
   makeGroundHeightFn,
+  scaleCount,
   vnoise,
 } from "./environmentKit";
 import { getWorldLayout, WORLD_CROSSINGS } from "./worldConfig";
@@ -203,7 +206,12 @@ export default function LaboratorioEnvironment() {
         sunColor="#8a6ec0"
         sunDir={LABORATORIO_SUN}
         sunPow={16}
-        halo={0.18}
+        halo={0.24}
+        cloudBands={[
+          { count: 3, y: 30, radius: 190, scale: 165, color: "#8a6ec0", opacity: 0.16, speed: 0.0016 },
+          { count: 3, y: 52, radius: 215, scale: 185, color: "#b08ad8", opacity: 0.12, speed: 0.0011 },
+        ]}
+        cloudSeed={SEED + 20}
       />
       {/* Paredes de la caverna: agujas de cristal en el horizonte. */}
       <KitSkyline
@@ -213,7 +221,7 @@ export default function LaboratorioEnvironment() {
           { count: 12, radius: 58, spread: 16, hMin: 16, hMax: 30, rMin: 4, rMax: 7, color: "#3a2b58", kind: "crystal", emissive: "#7c3aed", emissiveIntensity: 0.35, sink: 5 },
         ]}
       />
-      <KitGround half={HALF} heightFn={heightFn} colorFn={groundColor} />
+      <KitGround half={HALF} heightFn={heightFn} colorFn={groundColor} detailStyle="roca" detailSeed={SEED + 21} detailRepeat={26} />
       <KitPath
         curve={curve}
         heightFn={heightFn}
@@ -223,7 +231,8 @@ export default function LaboratorioEnvironment() {
         emissiveIntensity={0.5}
         seed={SEED + 2}
       />
-      {/* Grieta de cristal: luz líquida violeta bajo la pasarela de cuarzo. */}
+      {/* Grieta de cristal: luz líquida violeta con resplandor central y
+          espuma de luz en los bordes, bajo la pasarela de cuarzo. */}
       <FlowPlane
         width={HALF * 2 + 8}
         length={CROSS.half * 2 + 1.4}
@@ -231,6 +240,10 @@ export default function LaboratorioEnvironment() {
         deep="#2a1a4e"
         light="#c084fc"
         speed={0.5}
+        sunDir={LABORATORIO_SUN}
+        glint={0.45}
+        glintColor="#e8d8ff"
+        foam={0.4}
       />
       <KitWalkway
         crossing={CROSS}
@@ -267,10 +280,10 @@ export default function LaboratorioEnvironment() {
       <KitSealedZone x={LAYOUT.decorSpots.blocked[0]} z={LAYOUT.decorSpots.blocked[1]} seed={SEED + 10} />
       <KitPortalFrame x={LAYOUT.decorSpots.portal[0]} z={LAYOUT.decorSpots.portal[1]} stone="#4a3670" stoneDark="#3a2b58" gemColor="#f0a8d8" />
       <ObstacleShells obstacles={LAYOUT.obstacles} color="#4a3670" capColor="#5c4488" emissive="#7c3aed" emissiveIntensity={0.3} kind="crystal" />
-      {/* Setas fosforescentes: casquetes de luz rosa a ras de suelo. */}
+      {/* Setas fosforescentes: casquetes de luz rosa a ras de suelo (×2). */}
       <KitScatter
         seed={SEED + 11}
-        count={60}
+        count={scaleCount(120)}
         half={HALF}
         heightFn={heightFn}
         avoid={avoidSpots}
@@ -288,10 +301,10 @@ export default function LaboratorioEnvironment() {
         sink={0.05}
         avoidDist={1.8}
       />
-      {/* Brotes de cuarzo menores repartidos por la gruta. */}
+      {/* Brotes de cuarzo menores repartidos por la gruta (×2). */}
       <KitScatter
         seed={SEED + 12}
-        count={48}
+        count={scaleCount(96)}
         half={HALF}
         heightFn={heightFn}
         avoid={avoidSpots}
@@ -308,6 +321,16 @@ export default function LaboratorioEnvironment() {
         yStretchMax={2.4}
         avoidDist={1.9}
       />
+      {/* Fase 7: haces del resplandor cenital sobre la sala de cristales y
+          el jardín de setas. */}
+      <KitLightShafts
+        spots={[[-11.5, 2], [9, 10]]}
+        sunDir={LABORATORIO_SUN}
+        color="#d0b8f2"
+        opacity={0.08}
+      />
+      {/* Fase 7: bruma de gruta en el perímetro. */}
+      <KitFarFog seed={SEED + 16} color="#b9a2d8" radius={HALF + 8} y={2.6} opacity={0.12} />
       {/* Niebla baja violeta clara + Bruma del Vacío en altar y zona sellada. */}
       <KitGroundFog
         seed={SEED + 13}
@@ -317,10 +340,10 @@ export default function LaboratorioEnvironment() {
           { count: 4, cx: LAYOUT.decorSpots.blocked[0], cz: LAYOUT.decorSpots.blocked[1], rx: 4, rz: 4, color: "#8d78d8", opacity: 0.34 },
         ]}
       />
-      {/* Esporas flotantes rosa/azul (la vida de la caverna). */}
+      {/* Esporas flotantes rosa/azul, la vida de la caverna (Fase 7: +50%). */}
       <KitParticles
         seed={SEED + 14}
-        count={110}
+        count={scaleCount(165)}
         rx={HALF - 3}
         rz={HALF - 3}
         yMin={0.5}

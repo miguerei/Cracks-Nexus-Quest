@@ -11,9 +11,11 @@
 export type Spot = [number, number];
 
 // ---------------------------------------------------------------------------
-// Fase 7 — Tier de calidad (contrato opcional con render/quality.ts). Si el
-// módulo existe, escala las densidades de masas de los entornos; si no, todo
-// va a "alta". import.meta.glob resuelve en build: fichero ausente → {}.
+// Fase 7 — Escala de densidad por tier de calidad (contrato con
+// render/quality.ts). Los entornos escalan sus masas (hierba, partículas,
+// scatter) con este factor, leído al construir la escena. El módulo se
+// resuelve con un guard (import.meta.glob eager): si no existe en el build,
+// todo va a "alta" — el commit no depende de que quality.ts esté presente.
 // ---------------------------------------------------------------------------
 export type QualityTier = "alta" | "media" | "baja";
 
