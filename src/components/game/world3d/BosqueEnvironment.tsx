@@ -1301,7 +1301,8 @@ function GuardianStatue({ x, z, face = 0 }: { x: number; z: number; face?: numbe
       ))}
       <mesh position={[0, 3.75, 0]} rotation={[Math.PI / 2.4, 0, 0]}>
         <torusGeometry args={[0.62, 0.05, 8, 24]} />
-        <meshStandardMaterial color="#f4c542" emissive="#f4c542" emissiveIntensity={1.2} />
+        {/* Aditivo + sin depth: el halo brilla siempre y el AO no lo aplasta. */}
+        <meshBasicMaterial color="#f4c542" transparent opacity={0.95} blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
       </mesh>
       <mesh position={[0.6, 0.62, 0.6]} scale={[0.55, 0.25, 0.55]}>
         <sphereGeometry args={[0.7, 8, 6]} />
