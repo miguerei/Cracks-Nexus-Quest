@@ -11,8 +11,9 @@ import { ChallengeLocked } from "@/components/game/ChallengeLocked";
 import { ChallengeIntro } from "@/components/game/ChallengeIntro";
 import { ChallengeFeedback, type FeedbackState } from "@/components/game/ChallengeFeedback";
 import { hitFeedback, missFeedback } from "@/lib/challengeFeedback";
-import { BattleStageBackdrop, type BattleEvent } from "@/components/game/world3d/battle3d";
+import { BattleStageBackdrop, SfxToggle, type BattleEvent } from "@/components/game/world3d/battle3d";
 import { usePlayerStore } from "@/store/usePlayerStore";
+import { sfx } from "@/lib/sfx";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/reto/duelo")({
@@ -85,6 +86,7 @@ function PortalRace() {
         ? "cast"
         : "miss";
     setStageEvent((e) => ({ kind, n: e.n + 1 }));
+    sfx.battle(kind);
     setTimeout(next, 900);
   }
 
@@ -124,6 +126,7 @@ function PortalRace() {
       <StarField density={70} />
       {/* Fondo 3D del duelo: héroe de espaldas frente al rival entre ruinas */}
       <BattleStageBackdrop variant="rival" classId={avatar.classId} heroColor={avatar.color} event={stageEvent} />
+      <SfxToggle />
       <div className="mx-auto flex min-h-screen max-w-2xl flex-col px-4 py-6">
         {/* HUD */}
         <div className="mb-4 flex items-center justify-between gap-2">

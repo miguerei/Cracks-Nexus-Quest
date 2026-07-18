@@ -9,6 +9,7 @@ import { useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { mulberry32 } from "./battleUtils";
 import { STAGE_CFG } from "./stageConfig";
+import type { StageVariant } from "./types";
 
 const RUNA_AZUL = "#38bdf8";
 const PIEDRA = "#5f6455";
@@ -101,7 +102,7 @@ function Cristal({ position, tilt, scale }: { position: [number, number, number]
   );
 }
 
-export default function RuinsArena({ variant }: { variant: "rival" | "boss" }) {
+export default function RuinsArena({ variant }: { variant: StageVariant }) {
   const cfg = STAGE_CFG[variant];
   const esBoss = variant === "boss";
 
@@ -190,7 +191,7 @@ export default function RuinsArena({ variant }: { variant: "rival" | "boss" }) {
         <ringGeometry args={[2.5, 3, 40]} />
         <meshStandardMaterial
           color="#160b24"
-          emissive={esBoss ? "#a855f7" : "#f472b6"}
+          emissive={cfg.rim}
           emissiveIntensity={esBoss ? 0.6 : 1.25}
           transparent
           opacity={0.6}

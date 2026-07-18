@@ -11,8 +11,9 @@ import { ChallengeLocked } from "@/components/game/ChallengeLocked";
 import { ChallengeIntro } from "@/components/game/ChallengeIntro";
 import { ChallengeFeedback, type FeedbackState } from "@/components/game/ChallengeFeedback";
 import { hitFeedback, missFeedback } from "@/lib/challengeFeedback";
-import { BattleStageBackdrop, type BattleEvent } from "@/components/game/world3d/battle3d";
+import { BattleStageBackdrop, SfxToggle, type BattleEvent } from "@/components/game/world3d/battle3d";
 import { usePlayerStore } from "@/store/usePlayerStore";
+import { sfx } from "@/lib/sfx";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -92,6 +93,7 @@ function BossBattle() {
           ? "cast"
           : "miss";
     setStageEvent((e) => ({ kind, n: e.n + 1 }));
+    sfx.battle(kind);
     setTimeout(next, 950);
   }
 
@@ -141,6 +143,7 @@ function BossBattle() {
       <StarField density={90} />
       {/* Fondo 3D del jefe: el Coloso del Vacío entre ruinas, retícula al núcleo */}
       <BattleStageBackdrop variant="boss" classId={avatar.classId} heroColor={avatar.color} event={stageEvent} />
+      <SfxToggle />
       <div className="mx-auto flex min-h-screen max-w-2xl flex-col px-4 py-5">
         {/* Boss epic header */}
         <GameFrame glow={phase === 2 ? "violet" : phase === 1 ? "energy" : "primary"} className="mb-4 overflow-hidden">

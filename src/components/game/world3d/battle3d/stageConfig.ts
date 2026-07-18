@@ -5,6 +5,8 @@
 // posiciones del decorado, la cámara y los puntos de origen/impacto de los
 // hechizos viven aquí para que escena, arena y VFX compartan una sola verdad.
 
+import type { StageVariant } from "./types";
+
 export type Vec3 = [number, number, number];
 
 /** Posición del héroe en el suelo (x, 0, z). */
@@ -32,7 +34,7 @@ export type StageCfg = {
   rim: string;
 };
 
-export const STAGE_CFG: Record<"rival" | "boss", StageCfg> = {
+export const STAGE_CFG: Record<StageVariant, StageCfg> = {
   // Duelo: rival humanoide (silueta oscura, acentos rosa) sobre plataforma.
   rival: {
     bg: "#0d1226",
@@ -50,6 +52,26 @@ export const STAGE_CFG: Record<"rival" | "boss", StageCfg> = {
     look: [0.3, 3.15, -9],
     enemyPos: [0.5, 0, -9],
     core: [0.5, 3.75, -7.9],
+    hand: [-1.85, 1.72, 3.5],
+    rim: "#a855f7",
+  },
+  // Puzzle: Guardián Rúnico — monolito sellado, tono sereno, contraluz cian.
+  runas: {
+    bg: "#0e1424",
+    cam: [-1.15, 2.7, 8.4],
+    look: [0.3, 2.1, -8],
+    enemyPos: [0.6, 0, -7],
+    core: [0.6, 1.95, -6.6],
+    hand: [-1.85, 1.72, 3.5],
+    rim: "#7dd3fc",
+  },
+  // Arena: horda de Sombras del Vacío (principal al frente, dos al fondo).
+  horda: {
+    bg: "#100d22",
+    cam: [-1.15, 2.7, 8.4],
+    look: [0.3, 2, -8],
+    enemyPos: [0.5, 0, -7.5],
+    core: [0.5, 1.85, -6.95],
     hand: [-1.85, 1.72, 3.5],
     rim: "#a855f7",
   },

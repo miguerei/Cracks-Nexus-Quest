@@ -11,18 +11,18 @@
 // (mulberry32), animación por refs en useFrame (jamás setState por frame),
 // pools pequeños, máx. 1 pointLight de FX activa, sin sombras, dpr [1, 1.5].
 
-import { Suspense, useEffect, useMemo, useRef, type MutableRefObject } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import * as THREE from "three";
 
 import { getHeroLook } from "../worldConfig";
-import { HeroModel } from "./heroLink";
-import { RivalEnemy, VoidColossus, createEnemyFx, type EnemyFx } from "./enemies";
+import { StageActor, type StagePose } from "./stageActors";
+import { HordeShades, RivalEnemy, RuneWard, VoidColossus, createEnemyFx, type EnemyFx } from "./enemies";
 import RuinsArena from "./RuinsArena";
 import { cssColorToHex, mulberry32 } from "./battleUtils";
 import { HERO_HIP_Y, HERO_POS, HERO_SCALE, STAGE_CFG } from "./stageConfig";
-import type { BattleEventKind, BattleStage3DProps } from "./types";
+import type { BattleEvent, BattleEventKind, BattleStage3DProps, StageVariant } from "./types";
 
 const AZUL_HECHIZO = "#38bdf8";
 const CIAN_HOLO = "#7dd3fc";
@@ -75,7 +75,7 @@ function VisibilityFrameDriver() {
 // ---------------------------------------------------------------------------
 // Cámara fija con deriva cinematográfica y sacudida sutil (fallo/impacto).
 // ---------------------------------------------------------------------------
-function CameraRig({ variant, shakeRef }: { variant: "rival" | "boss"; shakeRef: MutableRefObject<number> }) {
+function CameraRig({ variant, shakeRef }: { variant: StageVariant; shakeRef: MutableRefObject<number> }) {
   const { camera } = useThree();
   const cfg = STAGE_CFG[variant];
   useFrame((state, dt) => {
@@ -114,7 +114,7 @@ function BattleVFX({
   shakeRef,
   heroRigRef,
 }: {
-  variant: "rival" | "boss";
+  variant: StageVariant;
   eventKind: BattleEventKind;
   eventN: number;
   enemyFx: MutableRefObject<EnemyFx>;
@@ -519,6 +519,50 @@ function BattleVFX({
 }
 
 // ---------------------------------------------------------------------------
+// Director de poses del rig animado (Adventurer). Traduce cada BattleEvent a
+// poses de héroe y rival SINCRONIZADAS con los tiempos del VFX (el impacto
+// del proyectil llega a WINDUP + FLIGHT ≈ 0.72 s; el pulso del Vacío alcanza
+// al héroe a ~0.78 s). setState solo por evento, jamás por frame.
+// ---------------------------------------------------------------------------
+type PoseState = { pose: StagePose; n: number };
+
+function useStagePoses(event: BattleEvent): { hero: PoseState; rival: PoseState } {
+  const [hero, setHero] = useState<PoseState>({ pose: "idle", n: 0 });
+  const [rival, setRival] = useState<PoseState>({ pose: "idle", n: 0 });
+
+  useEffect(() => {
+    const timers: number[] = [];
+    const later = (ms: number, fn: () => void) => timers.push(window.setTimeout(fn, ms));
+    // n únicos por (evento, paso) para re-disparar la animación cada vez.
+    const n = event.n * 2;
+    switch (event.kind) {
+      case "cast": // acierto: el héroe lanza; el rival encaja al llegar el proyectil
+        setHero({ pose: "cast", n });
+        later(720, () => setRival({ pose: "hit", n }));
+        break;
+      case "victory": // último hechizo + celebración; el rival cae
+        setHero({ pose: "cast", n });
+        later(720, () => setRival({ pose: "defeat", n }));
+        later(1080, () => setHero({ pose: "cheer", n: n + 1 }));
+        break;
+      case "miss": // fallo: el rival conjura el pulso; el héroe lo encaja
+        setRival({ pose: "cast", n });
+        later(780, () => setHero({ pose: "hit", n }));
+        break;
+      case "defeat": // derrota serena: el héroe cae, el rival celebra
+        setHero({ pose: "defeat", n });
+        setRival({ pose: "cheer", n });
+        break;
+      default:
+        break;
+    }
+    return () => timers.forEach((t) => window.clearTimeout(t));
+  }, [event.kind, event.n]);
+
+  return { hero, rival };
+}
+
+// ---------------------------------------------------------------------------
 // Escenario raíz (export por defecto para lazy()).
 // ---------------------------------------------------------------------------
 export default function BattleStage3D({ variant, classId, heroColor, event }: BattleStage3DProps) {
@@ -529,9 +573,10 @@ export default function BattleStage3D({ variant, classId, heroColor, event }: Ba
   const enemyFx = useRef<EnemyFx>(createEnemyFx());
   const shakeRef = useRef(0);
   const heroRig = useRef<THREE.Group>(null);
-  const speedRef = useRef(0);
   // El héroe mira SIEMPRE al enemigo (de espaldas a cámara).
   const facingRef = useRef(Math.atan2(cfg.enemyPos[0] - HERO_POS[0], cfg.enemyPos[2] - HERO_POS[2]));
+  // Poses del rig animado, sincronizadas con los tiempos del VFX.
+  const { hero: heroPose, rival: rivalPose } = useStagePoses(event);
 
   return (
     <Canvas
@@ -551,22 +596,32 @@ export default function BattleStage3D({ variant, classId, heroColor, event }: Ba
       <Suspense fallback={null}>
         <RuinsArena variant={variant} />
 
-        {/* Héroe de espaldas, primer término inferior-izquierda */}
+        {/* Héroe de espaldas, primer término inferior-izquierda.
+            StageActor: rig animado (Adventurer) si existe; HeroModel si no. */}
         <group ref={heroRig} position={[HERO_POS[0], HERO_HIP_Y, HERO_POS[2]]} scale={HERO_SCALE}>
-          <HeroModel
+          <StageActor
+            variant="hero"
+            classId={classId}
             bodyColor={heroHex}
             accent={look.accent}
             look={look}
-            variant="hero"
-            speedRef={speedRef}
+            pose={heroPose.pose}
+            poseN={heroPose.n}
             facingRef={facingRef}
-            classId={classId}
           />
         </group>
 
         {/* Enemigo al fondo centro */}
         <group position={cfg.enemyPos}>
-          {variant === "boss" ? <VoidColossus fxRef={enemyFx} /> : <RivalEnemy fxRef={enemyFx} />}
+          {variant === "boss" ? (
+            <VoidColossus fxRef={enemyFx} />
+          ) : variant === "runas" ? (
+            <RuneWard fxRef={enemyFx} />
+          ) : variant === "horda" ? (
+            <HordeShades fxRef={enemyFx} />
+          ) : (
+            <RivalEnemy fxRef={enemyFx} pose={rivalPose.pose} poseN={rivalPose.n} />
+          )}
         </group>
 
         {/* Director de efectos (hechizo, pulso, victoria, derrota) */}

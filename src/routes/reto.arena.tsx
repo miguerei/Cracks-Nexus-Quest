@@ -11,6 +11,9 @@ import { ChallengeLocked } from "@/components/game/ChallengeLocked";
 import { ChallengeIntro } from "@/components/game/ChallengeIntro";
 import { ChallengeFeedback, type FeedbackState } from "@/components/game/ChallengeFeedback";
 import { hitFeedback, missFeedback } from "@/lib/challengeFeedback";
+import { BattleStageBackdrop, SfxToggle, type BattleEvent } from "@/components/game/world3d/battle3d";
+import { usePlayerStore } from "@/store/usePlayerStore";
+import { sfx } from "@/lib/sfx";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -41,6 +44,10 @@ function WaveArena() {
   const [feedback, setFeedback] = useState<FeedbackState>(null);
   const [mastered, setMastered] = useState<string[]>([]);
   const [weak, setWeak] = useState<string[]>([]);
+  // Escenario 3D de fondo: oleada superada = hechizo + retroceso de la horda;
+  // fallo = pulso del Vacío. Solo presentación y sonido.
+  const avatar = usePlayerStore((s) => s.avatar);
+  const [stageEvent, setStageEvent] = useState<BattleEvent>({ kind: "idle", n: 0 });
 
   const q = WAVES[i];
 
@@ -63,6 +70,23 @@ function WaveArena() {
       setWeak((w) => [...w, q.concept]);
       setFeedback({ kind: "miss", text: missFeedback(q.concept, "El Vacío avanza"), key: Date.now() });
     }
+    // Evento del escenario 3D (solo presentación, la lógica no cambia):
+    // sin corazones → derrota; última oleada → según mayoría de aciertos;
+    // el resto → hechizo (la horda retrocede) o pulso del Vacío.
+    const dead = !ok && hp - 1 <= 0;
+    const last = i + 1 >= WAVES.length;
+    const finalCorrect = correct + (ok ? 1 : 0);
+    const kind: BattleEvent["kind"] = dead
+      ? "defeat"
+      : last
+        ? finalCorrect >= Math.ceil(WAVES.length / 2)
+          ? "victory"
+          : "defeat"
+        : ok
+          ? "cast"
+          : "miss";
+    setStageEvent((e) => ({ kind, n: e.n + 1 }));
+    sfx.battle(kind);
     setTimeout(next, 900);
   }
 
@@ -112,6 +136,9 @@ function WaveArena() {
     <div className="relative min-h-screen">
       <ChallengeFeedback feedback={feedback} />
       <StarField density={80} />
+      {/* Fondo 3D de la arena: la horda de Sombras del Vacío entre ruinas */}
+      <BattleStageBackdrop variant="horda" classId={avatar.classId} heroColor={avatar.color} event={stageEvent} />
+      <SfxToggle />
       <div className="mx-auto flex min-h-screen max-w-2xl flex-col px-4 py-6">
         <div className="mb-3 flex items-center justify-between gap-2">
           <div className="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-card/60 px-3 py-1.5 backdrop-blur">
@@ -169,7 +196,7 @@ function WaveArena() {
             <Shield className="h-4 w-4 text-accent" /> Elige tu golpe
           </div>
           <AnimatePresence mode="wait">
-            <motion.h2 key={q.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mb-6 text-center text-xl font-bold">
+            <motion.h2 key={q.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mb-6 text-center text-xl font-bold drop-shadow-[0_2px_10px_rgba(0,0,0,0.65)]">
               {q.prompt}
             </motion.h2>
           </AnimatePresence>
@@ -186,7 +213,7 @@ function WaveArena() {
                   onClick={() => attack(idx)}
                   disabled={picked !== null}
                   className={cn(
-                    "flex flex-col items-center gap-2 rounded-2xl border-2 p-5 text-center font-semibold transition bevel-highlight",
+                    "flex flex-col items-center gap-2 rounded-2xl border-2 p-5 text-center font-semibold backdrop-blur-sm transition bevel-highlight",
                     !show && "border-accent/40 bg-card/60 hover:border-accent hover:glow-energy",
                     show && isAns && "border-energy bg-energy/20 text-energy glow-energy",
                     show && chosen && !isAns && "border-destructive bg-destructive/20",

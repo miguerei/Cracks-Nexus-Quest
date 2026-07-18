@@ -12,6 +12,9 @@ import { ChallengeLocked } from "@/components/game/ChallengeLocked";
 import { ChallengeIntro } from "@/components/game/ChallengeIntro";
 import { ChallengeFeedback, type FeedbackState } from "@/components/game/ChallengeFeedback";
 import { hitFeedback, missFeedback } from "@/lib/challengeFeedback";
+import { BattleStageBackdrop, SfxToggle, type BattleEvent } from "@/components/game/world3d/battle3d";
+import { usePlayerStore } from "@/store/usePlayerStore";
+import { sfx } from "@/lib/sfx";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -41,6 +44,10 @@ function CrystalPuzzle() {
   const [streak, setStreak] = useState(0);
   const [bestStreak, setBestStreak] = useState(0);
   const [feedback, setFeedback] = useState<FeedbackState>(null);
+  // Escenario 3D de fondo: cada pareja correcta = hechizo al Guardián Rúnico;
+  // pareja errónea = pulso suave del Vacío. Solo presentación y sonido.
+  const avatar = usePlayerStore((s) => s.avatar);
+  const [stageEvent, setStageEvent] = useState<BattleEvent>({ kind: "idle", n: 0 });
 
   const total = PUZZLE_PAIRS.length;
 
@@ -57,6 +64,10 @@ function CrystalPuzzle() {
       setSelTerm(null);
       setFeedback({ kind: "hit", text: hitFeedback(term, "Cristal restaurado"), key: Date.now() });
       toast.success(newStreak >= 2 ? `¡Racha x${newStreak}!` : "¡Cristal alineado!");
+      // Presentación: última pareja = victoria (el Guardián se restaura); si no, hechizo.
+      const kind: BattleEvent["kind"] = nm.length === total ? "victory" : "cast";
+      setStageEvent((e) => ({ kind, n: e.n + 1 }));
+      sfx.battle(kind);
       if (nm.length === total) {
         setTimeout(
           () =>
@@ -78,6 +89,9 @@ function CrystalPuzzle() {
       setWrongPair(defId);
       setSelTerm(null);
       setFeedback({ kind: "miss", text: missFeedback(term, "Cristal inestable"), key: Date.now() });
+      // Presentación: pulso suave del Vacío (nunca punitivo).
+      setStageEvent((e) => ({ kind: "miss", n: e.n + 1 }));
+      sfx.battle("miss");
       setTimeout(() => setWrongPair(null), 500);
     }
   }
@@ -104,24 +118,27 @@ function CrystalPuzzle() {
     <div className="relative min-h-screen">
       <ChallengeFeedback feedback={feedback} />
       <StarField density={70} />
+      {/* Fondo 3D: el Guardián Rúnico sellado; cada pareja lo restaura un poco */}
+      <BattleStageBackdrop variant="runas" classId={avatar.classId} heroColor={avatar.color} event={stageEvent} />
+      <SfxToggle />
       <div className="mx-auto max-w-3xl px-4 py-6">
         <div className="mb-2 flex items-center gap-2">
           <CrystalIcon kind="crystal" size="sm" />
           <span className="font-display font-bold">Puzzle de Cristales</span>
         </div>
-        <p className="mb-5 text-sm text-muted-foreground">
+        <p className="mb-5 text-sm text-muted-foreground drop-shadow-[0_1px_6px_rgba(0,0,0,0.6)]">
           Restaura el Núcleo del Bosque uniendo cada concepto con su cristal de conocimiento.
         </p>
 
         {/* Stats HUD */}
         <div className="mb-5 grid grid-cols-3 gap-2 text-center text-xs font-semibold">
-          <span className="inline-flex items-center justify-center gap-1 rounded-full border border-primary/30 bg-card/60 px-2 py-1.5">
+          <span className="inline-flex items-center justify-center gap-1 rounded-full border border-primary/30 bg-card/60 px-2 py-1.5 backdrop-blur">
             <Link2 className="h-3.5 w-3.5 text-primary" /> {matched.length}/{total}
           </span>
-          <span className="inline-flex items-center justify-center gap-1 rounded-full border border-gold/30 bg-card/60 px-2 py-1.5 text-gold">
+          <span className="inline-flex items-center justify-center gap-1 rounded-full border border-gold/30 bg-card/60 px-2 py-1.5 text-gold backdrop-blur">
             <Flame className="h-3.5 w-3.5" /> Racha {streak}{bestStreak > 0 && ` · ${bestStreak}`}
           </span>
-          <span className="inline-flex items-center justify-center gap-1 rounded-full border border-destructive/30 bg-card/60 px-2 py-1.5 text-destructive">
+          <span className="inline-flex items-center justify-center gap-1 rounded-full border border-destructive/30 bg-card/60 px-2 py-1.5 text-destructive backdrop-blur">
             <XCircle className="h-3.5 w-3.5" /> {errors}
           </span>
         </div>
@@ -137,9 +154,12 @@ function CrystalPuzzle() {
                 <button
                   key={p.id}
                   disabled={done}
-                  onClick={() => setSelTerm(p.id)}
+                  onClick={() => {
+                    sfx.play("click");
+                    setSelTerm(p.id);
+                  }}
                   className={cn(
-                    "flex w-full items-center gap-3 rounded-2xl border-2 p-4 text-left font-semibold transition bevel-highlight",
+                    "flex w-full items-center gap-3 rounded-2xl border-2 p-4 text-left font-semibold backdrop-blur-sm transition bevel-highlight",
                     done && "border-energy bg-energy/20 text-energy glow-energy",
                     !done && sel && "border-primary bg-primary/15 text-primary glow-primary",
                     !done && !sel && "border-border bg-card/60 hover:border-primary/60",
@@ -165,7 +185,7 @@ function CrystalPuzzle() {
                   animate={wrong ? { x: [0, -8, 8, -6, 6, 0] } : {}}
                   onClick={() => tryMatch(p.id)}
                   className={cn(
-                    "relative w-full overflow-hidden rounded-2xl border-2 p-4 text-left text-sm transition bevel-highlight",
+                    "relative w-full overflow-hidden rounded-2xl border-2 p-4 text-left text-sm backdrop-blur-sm transition bevel-highlight",
                     done && "border-energy bg-energy/20 text-energy glow-energy",
                     wrong && "border-secondary bg-fog-void text-foreground",
                     !done && !wrong && "border-border bg-card/60 hover:border-primary/60",

@@ -11,6 +11,9 @@ import { ChallengeLocked } from "@/components/game/ChallengeLocked";
 import { ChallengeIntro } from "@/components/game/ChallengeIntro";
 import { ChallengeFeedback, type FeedbackState } from "@/components/game/ChallengeFeedback";
 import { hitFeedback, missFeedback } from "@/lib/challengeFeedback";
+import { BattleStageBackdrop, SfxToggle, type BattleEvent } from "@/components/game/world3d/battle3d";
+import { usePlayerStore } from "@/store/usePlayerStore";
+import { sfx } from "@/lib/sfx";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -42,6 +45,10 @@ function CardDuel() {
   const [feedback, setFeedback] = useState<FeedbackState>(null);
   const [mastered, setMastered] = useState<string[]>([]);
   const [weak, setWeak] = useState<string[]>([]);
+  // Escenario 3D de fondo: carta correcta = hechizo al Duelista del Vacío;
+  // carta errónea = pulso del Vacío. Solo presentación y sonido.
+  const avatar = usePlayerStore((s) => s.avatar);
+  const [stageEvent, setStageEvent] = useState<BattleEvent>({ kind: "idle", n: 0 });
 
   const q = QS[i];
 
@@ -68,6 +75,26 @@ function CardDuel() {
       setFeedback({ kind: "miss", text: missFeedback(q.concept, "Ataque bloqueado"), key: Date.now() });
       setTimeout(() => setPlayerHit(false), 400);
     }
+    // Evento del escenario 3D (solo presentación, la lógica no cambia):
+    // rival sin vida → victoria; sin corazones → derrota; última carta →
+    // según mayoría de aciertos; el resto → hechizo o pulso del Vacío.
+    const rivalDown = ok && rivalHp - 2 <= 0;
+    const playerDown = !ok && playerHp - 1 <= 0;
+    const last = i + 1 >= QS.length;
+    const finalCorrect = correct + (ok ? 1 : 0);
+    const kind: BattleEvent["kind"] = rivalDown
+      ? "victory"
+      : playerDown
+        ? "defeat"
+        : last
+          ? finalCorrect >= Math.ceil(QS.length / 2)
+            ? "victory"
+            : "defeat"
+          : ok
+            ? "cast"
+            : "miss";
+    setStageEvent((e) => ({ kind, n: e.n + 1 }));
+    sfx.battle(kind);
     setTimeout(next, 950);
   }
 
@@ -117,6 +144,9 @@ function CardDuel() {
     <div className="relative min-h-screen">
       <ChallengeFeedback feedback={feedback} />
       <StarField density={70} />
+      {/* Fondo 3D del duelo de cartas: el Duelista del Vacío entre ruinas */}
+      <BattleStageBackdrop variant="rival" classId={avatar.classId} heroColor={avatar.color} event={stageEvent} />
+      <SfxToggle />
       <div className="mx-auto flex min-h-screen max-w-2xl flex-col px-4 py-6">
         <div className="mb-4 flex items-center justify-between gap-2">
           <div className="inline-flex items-center gap-2 rounded-full border border-secondary/30 bg-card/60 px-3 py-1.5 backdrop-blur">
@@ -164,7 +194,7 @@ function CardDuel() {
             <Sparkles className="h-4 w-4 text-secondary" /> Elige tu carta-respuesta
           </div>
           <AnimatePresence mode="wait">
-            <motion.h2 key={q.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mb-6 text-center text-xl font-bold">
+            <motion.h2 key={q.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mb-6 text-center text-xl font-bold drop-shadow-[0_2px_10px_rgba(0,0,0,0.65)]">
               {q.prompt}
             </motion.h2>
           </AnimatePresence>
@@ -181,7 +211,7 @@ function CardDuel() {
                   onClick={() => play(idx)}
                   disabled={picked !== null}
                   className={cn(
-                    "relative flex h-36 flex-col items-center justify-between overflow-hidden rounded-2xl border-2 p-4 text-center text-sm font-semibold transition bevel-highlight",
+                    "relative flex h-36 flex-col items-center justify-between overflow-hidden rounded-2xl border-2 p-4 text-center text-sm font-semibold backdrop-blur-sm transition bevel-highlight",
                     !show && "border-secondary/50 bg-card/70 hover:border-secondary hover:glow-violet",
                     show && isAns && "border-energy bg-energy/20 text-energy glow-energy",
                     show && chosen && !isAns && "border-destructive bg-destructive/20",
