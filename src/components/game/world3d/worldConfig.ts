@@ -10,6 +10,41 @@
 /** Coordenada en el plano del terreno (x, z). y=0 es el suelo. */
 export type Spot = [number, number];
 
+// ---------------------------------------------------------------------------
+// Fase 7 — Tier de calidad (contrato opcional con render/quality.ts). Si el
+// módulo existe, escala las densidades de masas de los entornos; si no, todo
+// va a "alta". import.meta.glob resuelve en build: fichero ausente → {}.
+// ---------------------------------------------------------------------------
+export type QualityTier = "alta" | "media" | "baja";
+
+const QUALITY_MODULES = import.meta.glob("./render/quality.ts", { eager: true }) as Record<
+  string,
+  { getQualityTier?: () => QualityTier } | undefined
+>;
+
+export function getQualityTierSafe(): QualityTier {
+  const mod = QUALITY_MODULES["./render/quality.ts"];
+  if (mod?.getQualityTier) {
+    try {
+      return mod.getQualityTier();
+    } catch {
+      return "alta";
+    }
+  }
+  return "alta";
+}
+
+/** Escala de densidad de masas según el tier (alta ×1, media ×0.6, baja ×0.35). */
+export function densityScale(): number {
+  const tier = getQualityTierSafe();
+  return tier === "alta" ? 1 : tier === "media" ? 0.6 : 0.35;
+}
+
+/** count escalado por el tier de calidad (mínimo 1). */
+export function scaleCount(count: number): number {
+  return Math.max(1, Math.round(count * densityScale()));
+}
+
 export type World3DTheme = {
   /** Color base del suelo. */
   ground: string;

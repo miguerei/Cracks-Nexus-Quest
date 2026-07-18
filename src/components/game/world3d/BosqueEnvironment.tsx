@@ -14,7 +14,7 @@ import { useFrame } from "@react-three/fiber";
 import { CuboidCollider, CylinderCollider, RigidBody } from "@react-three/rapier";
 import * as THREE from "three";
 
-import { BOSQUE_BRIDGE, BOSQUE_RIVER, getWorldLayout } from "./worldConfig";
+import { BOSQUE_BRIDGE, BOSQUE_RIVER, getWorldLayout, scaleCount } from "./worldConfig";
 
 const HALF = getWorldLayout("bosque").groundHalf;
 
@@ -125,6 +125,212 @@ export function makeCloudTexture() {
   return tex;
 }
 
+// ---------------------------------------------------------------------------
+// Fase 7 (Cine Pass) — Textura de racimo de hojas para copas de "cartas".
+// Se pinta en LUMINANCIA (gris claro→oscuro con degradado vertical): el verde
+// lo pone el instanceColor al multiplicar, así una sola textura sirve para
+// cualquier paleta de copa. Bordes irregulares con alpha.
+// ---------------------------------------------------------------------------
+export function makeFoliageTexture(seed = 205) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 256;
+  const g = c.getContext("2d")!;
+  const rnd = mulberry32(seed);
+  g.clearRect(0, 0, 256, 256);
+  // Racimo: hojas lágrima superpuestas alrededor del centro, más luz arriba.
+  for (let i = 0; i < 46; i++) {
+    const a = rnd() * Math.PI * 2;
+    const r = Math.pow(rnd(), 0.6) * 88;
+    const x = 128 + Math.cos(a) * r;
+    const y = 134 + Math.sin(a) * r * 0.82;
+    const len = 20 + rnd() * 26;
+    const wid = len * (0.42 + rnd() * 0.2);
+    const rot = rnd() * Math.PI * 2;
+    // Luminancia: más clara cuanto más arriba (falso subsurface).
+    const upness = 1 - Math.min(1, Math.max(0, (y - 30) / 200));
+    const lum = Math.round(105 + upness * 125 + (rnd() - 0.5) * 34);
+    const lumDark = Math.round(lum * 0.55);
+    g.save();
+    g.translate(x, y);
+    g.rotate(rot);
+    const grad = g.createLinearGradient(0, -len / 2, 0, len / 2);
+    grad.addColorStop(0, `rgb(${lum},${lum},${lum})`);
+    grad.addColorStop(1, `rgb(${lumDark},${lumDark},${lumDark})`);
+    g.fillStyle = grad;
+    g.beginPath();
+    // Hoja lágrima: punta arriba, base redonda.
+    g.moveTo(0, -len / 2);
+    g.quadraticCurveTo(wid / 2, -len * 0.1, wid * 0.34, len / 2);
+    g.quadraticCurveTo(0, len * 0.62, -wid * 0.34, len / 2);
+    g.quadraticCurveTo(-wid / 2, -len * 0.1, 0, -len / 2);
+    g.closePath();
+    g.fill();
+    g.restore();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/** Fronda de helecho (canvas 128², luminancia + alpha; el tinte va por instancia). */
+export function makeFernTexture(seed = 207) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const g = c.getContext("2d")!;
+  const rnd = mulberry32(seed);
+  g.clearRect(0, 0, 128, 128);
+  // Tallo central curvado.
+  g.strokeStyle = "rgb(96,96,96)";
+  g.lineWidth = 3;
+  g.beginPath();
+  g.moveTo(64, 126);
+  g.quadraticCurveTo(60, 66, 70, 12);
+  g.stroke();
+  // Foliolos a ambos lados, más cortos hacia la punta.
+  for (let k = 0; k < 13; k++) {
+    const t = k / 13;
+    const y = 120 - t * 104;
+    const x = 64 + (t * t * 6 - 2);
+    const len = (1 - t * 0.75) * 26 + rnd() * 4;
+    const lum = Math.round(120 + (1 - t) * 20 + rnd() * 70);
+    g.strokeStyle = `rgb(${lum},${lum},${lum})`;
+    g.lineWidth = 4.5 - t * 2.6;
+    for (const side of [-1, 1]) {
+      g.beginPath();
+      g.moveTo(x, y);
+      g.quadraticCurveTo(x + side * len * 0.6, y - 4, x + side * len, y - 10 - t * 5);
+      g.stroke();
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// ---------------------------------------------------------------------------
+// Fase 7 — Textura de detalle del suelo (canvas 256², tileable). Se multiplica
+// con los vertex colors del terreno: base casi blanca con moteado sutil para
+// que los primeros planos dejen de ser color plano. Sirve también de bumpMap.
+// ---------------------------------------------------------------------------
+export type GroundDetailStyle = "hierba" | "arena" | "roca" | "placa" | "losa";
+
+export function makeGroundDetailTexture(style: GroundDetailStyle, seed = 301, repeat = 26) {
+  const S = 256;
+  const c = document.createElement("canvas");
+  c.width = c.height = S;
+  const g = c.getContext("2d")!;
+  const rnd = mulberry32(seed);
+  g.fillStyle = "rgb(235,235,235)";
+  g.fillRect(0, 0, S, S);
+  // Todo se dibuja con réplicas ±S para que el tile no tenga costuras.
+  const wrapped = (draw: (dx: number, dy: number) => void) => {
+    for (let dx = -S; dx <= S; dx += S) for (let dy = -S; dy <= S; dy += S) draw(dx, dy);
+  };
+  const dot = (x: number, y: number, r: number, lum: number, alpha: number) => {
+    const ry = r * (0.6 + rnd() * 0.5);
+    const rot = rnd() * Math.PI;
+    wrapped((dx, dy) => {
+      g.fillStyle = `rgba(${lum},${lum},${lum},${alpha})`;
+      g.beginPath();
+      g.ellipse(x + dx, y + dy, r, ry, rot, 0, Math.PI * 2);
+      g.fill();
+    });
+  };
+  const stroke = (x: number, y: number, len: number, ang: number, w: number, lum: number, alpha: number) => {
+    wrapped((dx, dy) => {
+      g.strokeStyle = `rgba(${lum},${lum},${lum},${alpha})`;
+      g.lineWidth = w;
+      g.beginPath();
+      g.moveTo(x + dx, y + dy);
+      g.lineTo(x + dx + Math.cos(ang) * len, y + dy + Math.sin(ang) * len);
+      g.stroke();
+    });
+  };
+  if (style === "hierba") {
+    // Moteado de matas: manchas difusas + briznas cortas + flecos de luz.
+    for (let i = 0; i < 60; i++) dot(rnd() * S, rnd() * S, 5 + rnd() * 12, 185 + Math.floor(rnd() * 30), 0.35);
+    for (let i = 0; i < 110; i++) stroke(rnd() * S, rnd() * S, 5 + rnd() * 8, -Math.PI / 2 + (rnd() - 0.5) * 1, 1.4, 165 + Math.floor(rnd() * 40), 0.5);
+    for (let i = 0; i < 46; i++) dot(rnd() * S, rnd() * S, 1 + rnd() * 2.4, 250, 0.55);
+  } else if (style === "arena") {
+    // Grano fino + ondas de viento diagonales claras.
+    for (let i = 0; i < 320; i++) dot(rnd() * S, rnd() * S, 0.7 + rnd() * 1.6, 190 + Math.floor(rnd() * 55), 0.5);
+    for (let i = 0; i < 22; i++) stroke(rnd() * S, rnd() * S, 34 + rnd() * 60, 0.35 + (rnd() - 0.5) * 0.2, 2.2, 252, 0.3);
+    for (let i = 0; i < 16; i++) stroke(rnd() * S, rnd() * S, 26 + rnd() * 44, 0.35 + (rnd() - 0.5) * 0.2, 1.6, 200, 0.3);
+  } else if (style === "roca") {
+    // Manchas minerales + grietas finas.
+    for (let i = 0; i < 70; i++) dot(rnd() * S, rnd() * S, 4 + rnd() * 14, 175 + Math.floor(rnd() * 55), 0.4);
+    for (let i = 0; i < 26; i++) {
+      let x = rnd() * S;
+      let y = rnd() * S;
+      let a = rnd() * Math.PI * 2;
+      for (let k = 0; k < 4; k++) {
+        const len = 8 + rnd() * 14;
+        stroke(x, y, len, a, 1.1, 150 + Math.floor(rnd() * 30), 0.5);
+        x += Math.cos(a) * len;
+        y += Math.sin(a) * len;
+        a += (rnd() - 0.5) * 1.2;
+      }
+    }
+    for (let i = 0; i < 40; i++) dot(rnd() * S, rnd() * S, 1 + rnd() * 2, 250, 0.4);
+  } else if (style === "placa") {
+    // Placa tecnológica: junta de losetas + microtaladros.
+    g.strokeStyle = "rgba(196,196,196,0.55)";
+    g.lineWidth = 2;
+    for (let k = 0; k <= 4; k++) {
+      const p = (k * S) / 4;
+      wrapped((dx, dy) => {
+        g.beginPath();
+        g.moveTo(0 + dx, p + dy);
+        g.lineTo(S + dx, p + dy);
+        g.moveTo(p + dx, 0 + dy);
+        g.lineTo(p + dx, S + dy);
+        g.stroke();
+      });
+    }
+    for (let i = 0; i < 90; i++) dot(rnd() * S, rnd() * S, 0.9 + rnd() * 1.6, 200 + Math.floor(rnd() * 40), 0.5);
+    for (let i = 0; i < 12; i++) stroke(rnd() * S, rnd() * S, 18 + rnd() * 30, rnd() > 0.5 ? 0 : Math.PI / 2, 1.4, 252, 0.4);
+  } else {
+    // "losa": piedra pulida con vetas suaves y motas de plata.
+    for (let i = 0; i < 55; i++) dot(rnd() * S, rnd() * S, 5 + rnd() * 13, 190 + Math.floor(rnd() * 40), 0.35);
+    for (let i = 0; i < 18; i++) stroke(rnd() * S, rnd() * S, 30 + rnd() * 50, rnd() * Math.PI, 1.8, 208, 0.35);
+    for (let i = 0; i < 60; i++) dot(rnd() * S, rnd() * S, 0.8 + rnd() * 1.4, 252, 0.5);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(repeat, repeat);
+  return tex;
+}
+
+/** Banda de nubes lejanas pintada (canvas 512×128, alpha suave). */
+export function makeCloudBandTexture(seed = 311) {
+  const c = document.createElement("canvas");
+  c.width = 512;
+  c.height = 128;
+  const g = c.getContext("2d")!;
+  const rnd = mulberry32(seed);
+  for (let i = 0; i < 30; i++) {
+    const x = 30 + rnd() * 452;
+    const y = 46 + rnd() * 40;
+    const rx = 30 + rnd() * 64;
+    const ry = rx * (0.22 + rnd() * 0.16);
+    const grad = g.createRadialGradient(x, y, 0, x, y, rx);
+    grad.addColorStop(0, "rgba(255,255,255,0.4)");
+    grad.addColorStop(0.55, "rgba(255,252,244,0.18)");
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    g.save();
+    g.translate(x, y);
+    g.scale(1, ry / rx);
+    g.translate(-x, -y);
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 512, 128);
+    g.restore();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 function makeGrassTexture() {
   const c = document.createElement("canvas");
   c.width = c.height = 128;
@@ -218,7 +424,8 @@ function Sky() {
             col = mix(col, uZenith, smoothstep(0.18, 0.72, h));
             float s = clamp(dot(normalize(vDir), normalize(uSun)), 0.0, 1.0);
             col += uSunColor * pow(s, 90.0) * 1.1;   // disco
-            col += uSunColor * pow(s, 6.0) * 0.28;   // halo amplio
+            col += uSunColor * pow(s, 6.0) * 0.42;   // halo amplio (Fase 7: más presente)
+            col += uSunColor * pow(s, 2.2) * 0.12;   // resplandor dorado de tarde
             gl_FragColor = vec4(col, 1.0);
           }
         `,
@@ -226,6 +433,7 @@ function Sky() {
     [],
   );
   const cloudTex = useMemo(() => makeCloudTexture(), []);
+  const bandTex = useMemo(() => makeCloudBandTexture(311), []);
   const clouds = useMemo(() => {
     const rnd = mulberry32(91);
     return Array.from({ length: 8 }, () => ({
@@ -237,7 +445,28 @@ function Sky() {
       opacity: 0.4 + rnd() * 0.35,
     }));
   }, []);
+  // Fase 7: bandas de nubes lejanas pintadas, doradas por la tarde, con
+  // parallax lentísimo a distintas alturas.
+  const bands = useMemo(() => {
+    const rnd = mulberry32(93);
+    const defs = [
+      { y: 26, radius: 190, scale: 150, color: "#ffe2b8", opacity: 0.34 },
+      { y: 46, radius: 220, scale: 190, color: "#fff2da", opacity: 0.26 },
+      { y: 68, radius: 205, scale: 170, color: "#f2e2ce", opacity: 0.2 },
+    ];
+    return defs.flatMap((d) =>
+      Array.from({ length: 3 }, () => ({
+        ...d,
+        angle: rnd() * Math.PI * 2,
+        radius: d.radius + rnd() * 30,
+        scale: d.scale * (0.8 + rnd() * 0.5),
+        speed: 0.0016 + rnd() * 0.0022,
+        opacity: d.opacity * (0.75 + rnd() * 0.4),
+      })),
+    );
+  }, []);
   const cloudRefs = useRef<(THREE.Sprite | null)[]>([]);
+  const bandRefs = useRef<(THREE.Sprite | null)[]>([]);
   useFrame((state) => {
     const t = state.clock.elapsedTime;
     clouds.forEach((c, i) => {
@@ -245,6 +474,12 @@ function Sky() {
       if (!s) return;
       const a = c.angle + t * c.speed;
       s.position.set(Math.cos(a) * c.radius, c.y, Math.sin(a) * c.radius);
+    });
+    bands.forEach((b, i) => {
+      const s = bandRefs.current[i];
+      if (!s) return;
+      const a = b.angle + t * b.speed;
+      s.position.set(Math.cos(a) * b.radius, b.y, Math.sin(a) * b.radius);
     });
   });
   return (
@@ -260,6 +495,17 @@ function Sky() {
           scale={[c.scale, c.scale * 0.45, 1]}
         >
           <spriteMaterial map={cloudTex} transparent opacity={c.opacity} depthWrite={false} fog={false} />
+        </sprite>
+      ))}
+      {bands.map((b, i) => (
+        <sprite
+          key={`b${i}`}
+          ref={(el) => (bandRefs.current[i] = el)}
+          position={[Math.cos(b.angle) * b.radius, b.y, Math.sin(b.angle) * b.radius]}
+          scale={[b.scale, b.scale * 0.26, 1]}
+          renderOrder={-9}
+        >
+          <spriteMaterial map={bandTex} color={b.color} transparent opacity={b.opacity} depthWrite={false} fog={false} />
         </sprite>
       ))}
     </group>
@@ -352,9 +598,20 @@ function Ground() {
     g.computeVertexNormals();
     return g;
   }, []);
+  // Fase 7: moteado de hierba tileable multiplicado con los vertex colors,
+  // con bump barato para que el primer plano deje de ser color plano.
+  const detailTex = useMemo(() => makeGroundDetailTexture("hierba", 301, 30), []);
   return (
     <mesh geometry={geo} receiveShadow>
-      <meshStandardMaterial vertexColors flatShading roughness={0.95} metalness={0} />
+      <meshStandardMaterial
+        vertexColors
+        flatShading
+        roughness={0.95}
+        metalness={0}
+        map={detailTex}
+        bumpMap={detailTex}
+        bumpScale={0.05}
+      />
     </mesh>
   );
 }
@@ -429,17 +686,24 @@ function Path({ curve, samples }: { curve: THREE.CatmullRomCurve3; samples: [num
 // Bosque: árboles instanciados en el perímetro + dos árboles colosales.
 // ---------------------------------------------------------------------------
 function Trees() {
-  const { trunks, blobs } = useMemo(() => {
+  const { trunks, blobs, cards } = useMemo(() => {
     const rnd = mulberry32(11);
     const trunks: { m: THREE.Matrix4; c: THREE.Color }[] = [];
     const blobs: { m: THREE.Matrix4; c: THREE.Color }[] = [];
+    const cards: { m: THREE.Matrix4; c: THREE.Color }[] = [];
     const trunkCol = new THREE.Color("#5d4a34");
     const canA = new THREE.Color("#2e6b3c");
     const canB = new THREE.Color("#7fae4c");
+    // Falso subsurface: las cartas orientadas hacia arriba tiran a este verde-luz.
+    const canLight = new THREE.Color("#a8d060");
     const tmpM = new THREE.Matrix4();
     const pos = new THREE.Vector3();
     const quat = new THREE.Quaternion();
     const scl = new THREE.Vector3();
+    const Z_AXIS = new THREE.Vector3(0, 0, 1);
+    const dir = new THREE.Vector3();
+    const qAlign = new THREE.Quaternion();
+    const qRoll = new THREE.Quaternion();
 
     const place = (x: number, z: number, s: number) => {
       const y = bosqueGroundHeight(x, z) - 0.25;
@@ -448,6 +712,8 @@ function Trees() {
       scl.set(s * (0.85 + rnd() * 0.3), s, s * (0.85 + rnd() * 0.3));
       tmpM.compose(pos, quat, scl);
       trunks.push({ m: tmpM.clone(), c: trunkCol.clone().multiplyScalar(0.85 + rnd() * 0.3) });
+      // Núcleo de la copa: los blobs siguen debajo (masa oscura interior que
+      // evita ver a través de las cartas).
       const nBlobs = 3;
       for (let b = 0; b < nBlobs; b++) {
         const bx = x + (rnd() - 0.5) * 2.6 * s;
@@ -458,7 +724,28 @@ function Trees() {
         scl.set(bs, bs * (0.8 + rnd() * 0.3), bs);
         quat.setFromEuler(new THREE.Euler(rnd(), rnd() * Math.PI, rnd() * 0.4));
         tmpM.compose(pos, quat, scl);
-        blobs.push({ m: tmpM.clone(), c: canA.clone().lerp(canB, rnd()) });
+        blobs.push({ m: tmpM.clone(), c: canA.clone().lerp(canB, rnd() * 0.8).multiplyScalar(0.88) });
+      }
+      // Fase 7: racimo de CARTAS de follaje alrededor del núcleo. Orientadas
+      // hacia fuera al montar (billboarding parcial, nunca por frame).
+      const cy = y + 8.2 * s;
+      const nCards = 8 + Math.floor(rnd() * 6); // 8-13 por copa
+      for (let k = 0; k < nCards; k++) {
+        const yv = Math.min(1, -0.35 + rnd() * 1.35); // sesgo hacia arriba
+        const hr = Math.sqrt(Math.max(0.05, 1 - yv * yv));
+        const aa = rnd() * Math.PI * 2;
+        dir.set(Math.cos(aa) * hr, yv, Math.sin(aa) * hr).normalize();
+        const rad = (1.3 + rnd() * 1.3) * s;
+        pos.set(x + dir.x * rad, cy + dir.y * rad * 0.85, z + dir.z * rad);
+        qAlign.setFromUnitVectors(Z_AXIS, dir);
+        qRoll.setFromAxisAngle(dir, rnd() * Math.PI * 2);
+        quat.copy(qRoll).multiply(qAlign);
+        const sc = (2 + rnd() * 1.3) * s;
+        scl.set(sc, sc, 1);
+        tmpM.compose(pos, quat, scl);
+        const c = canA.clone().lerp(canB, rnd());
+        c.lerp(canLight, Math.max(0, dir.y) * 0.55);
+        cards.push({ m: tmpM.clone(), c });
       }
     };
 
@@ -480,11 +767,13 @@ function Trees() {
       [14, -6, 0.75], [-13, 2, 0.8],
     ];
     for (const [x, z, s] of interior) place(x, z, s);
-    return { trunks, blobs };
+    return { trunks, blobs, cards };
   }, []);
 
+  const foliageTex = useMemo(() => makeFoliageTexture(), []);
   const trunkRef = useRef<THREE.InstancedMesh>(null);
   const blobRef = useRef<THREE.InstancedMesh>(null);
+  const cardRef = useRef<THREE.InstancedMesh>(null);
   const canopySway = useRef(0);
 
   useFrame((state) => {
@@ -495,6 +784,7 @@ function Trees() {
     if (blobRef.current && Math.abs(target - canopySway.current) > 0.0004) {
       canopySway.current = target;
       blobRef.current.rotation.z = target;
+      if (cardRef.current) cardRef.current.rotation.z = target;
     }
   });
 
@@ -532,6 +822,22 @@ function Trees() {
         <icosahedronGeometry args={[2.6, 1]} />
         <meshStandardMaterial flatShading roughness={0.9} />
       </instancedMesh>
+      {/* Cartas de follaje: la copa densa con luz atravesando (Fase 7). */}
+      <instancedMesh
+        ref={(m) => {
+          cardRef.current = m;
+          setup(m, cards);
+        }}
+        args={[undefined, undefined, cards.length]}
+      >
+        <planeGeometry args={[1, 1]} />
+        <meshStandardMaterial
+          map={foliageTex}
+          alphaTest={0.45}
+          side={THREE.DoubleSide}
+          roughness={0.9}
+        />
+      </instancedMesh>
     </group>
   );
 }
@@ -540,15 +846,47 @@ function Trees() {
 function GiantTree({ x, z }: { x: number; z: number }) {
   const y = bosqueGroundHeight(x, z) - 0.3;
   const rnd = useMemo(() => mulberry32(Math.floor(x * 13 + z * 7 + 100)), [x, z]);
-  const blobs = useMemo(
-    () =>
-      Array.from({ length: 5 }, () => ({
-        p: [(rnd() - 0.5) * 7, 15 + rnd() * 4, (rnd() - 0.5) * 7] as [number, number, number],
-        s: 3.2 + rnd() * 2.4,
-        c: new THREE.Color("#2e6b3c").lerp(new THREE.Color("#8fbe52"), rnd()),
-      })),
-    [rnd],
-  );
+  const foliageTex = useMemo(() => makeFoliageTexture(), []);
+  const { blobs, cards } = useMemo(() => {
+    const blobs = Array.from({ length: 5 }, () => ({
+      p: [(rnd() - 0.5) * 7, 15 + rnd() * 4, (rnd() - 0.5) * 7] as [number, number, number],
+      s: 3.2 + rnd() * 2.4,
+      c: new THREE.Color("#2e6b3c").lerp(new THREE.Color("#8fbe52"), rnd() * 0.8).multiplyScalar(0.9),
+    }));
+    // Fase 7: cartas de follaje en corona alrededor de cada blob de la copa.
+    const cards: { m: THREE.Matrix4; c: THREE.Color }[] = [];
+    const canA = new THREE.Color("#2e6b3c");
+    const canB = new THREE.Color("#8fbe52");
+    const canLight = new THREE.Color("#b2d868");
+    const M = new THREE.Matrix4();
+    const p = new THREE.Vector3();
+    const q = new THREE.Quaternion();
+    const qRoll = new THREE.Quaternion();
+    const s = new THREE.Vector3();
+    const dir = new THREE.Vector3();
+    const Z_AXIS = new THREE.Vector3(0, 0, 1);
+    for (const b of blobs) {
+      const n = 9 + Math.floor(rnd() * 4);
+      for (let k = 0; k < n; k++) {
+        const yv = Math.min(1, -0.3 + rnd() * 1.3);
+        const hr = Math.sqrt(Math.max(0.05, 1 - yv * yv));
+        const aa = rnd() * Math.PI * 2;
+        dir.set(Math.cos(aa) * hr, yv, Math.sin(aa) * hr).normalize();
+        const rad = b.s * (0.65 + rnd() * 0.5);
+        p.set(b.p[0] + dir.x * rad, b.p[1] + dir.y * rad * 0.85, b.p[2] + dir.z * rad);
+        q.setFromUnitVectors(Z_AXIS, dir);
+        qRoll.setFromAxisAngle(dir, rnd() * Math.PI * 2);
+        q.premultiply(qRoll);
+        const sc = b.s * (0.85 + rnd() * 0.5);
+        s.set(sc, sc, 1);
+        M.compose(p, q, s);
+        const c = canA.clone().lerp(canB, rnd());
+        c.lerp(canLight, Math.max(0, dir.y) * 0.55);
+        cards.push({ m: M.clone(), c });
+      }
+    }
+    return { blobs, cards };
+  }, [rnd]);
   return (
     <group position={[x, y, z]}>
       <RigidBody type="fixed" colliders={false}>
@@ -574,6 +912,22 @@ function GiantTree({ x, z }: { x: number; z: number }) {
           <meshStandardMaterial color={b.c} flatShading roughness={0.9} />
         </mesh>
       ))}
+      {/* Corona de cartas de follaje del coloso (una sola malla instanciada). */}
+      <instancedMesh
+        ref={(m) => {
+          if (!m) return;
+          cards.forEach((it, i) => {
+            m.setMatrixAt(i, it.m);
+            m.setColorAt(i, it.c);
+          });
+          m.instanceMatrix.needsUpdate = true;
+          if (m.instanceColor) m.instanceColor.needsUpdate = true;
+        }}
+        args={[undefined, undefined, cards.length]}
+      >
+        <planeGeometry args={[1, 1]} />
+        <meshStandardMaterial map={foliageTex} alphaTest={0.45} side={THREE.DoubleSide} roughness={0.9} />
+      </instancedMesh>
     </group>
   );
 }

@@ -1,7 +1,7 @@
 import { Component, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ClientOnly } from "@tanstack/react-router";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { Zap, Puzzle, Crown, Swords, Layers, Lock, ArrowLeft, Gamepad2, MoveUp, Menu, Sparkles, X, Map as MapIcon, Trophy, User } from "lucide-react";
 import { StatusBadge } from "@/components/game/StatusBadge";
 import { StarField } from "@/components/game/StarField";

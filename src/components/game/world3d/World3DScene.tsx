@@ -23,8 +23,10 @@ import {
   RigidBody,
   type RapierRigidBody,
 } from "@react-three/rapier";
-import { Bloom, EffectComposer, Vignette } from "@react-three/postprocessing";
 import * as THREE from "three";
+
+import { CinematicEffects } from "./render/CinematicEffects";
+import { getTierDpr, useQualityTier } from "./render/quality";
 
 import {
   INTERACT_REACH,
@@ -1583,6 +1585,8 @@ export default function World3DScene({
   onActiveNodeChange: (id: string | null) => void;
   onInteract: (id: string) => void;
 }) {
+  // Fase 7 (Cine Pass): tier de calidad reactivo (toggle/localStorage/detección).
+  const tier = useQualityTier();
   const theme = useMemo(() => getWorld3DTheme(worldId), [worldId]);
   const layout = useMemo(() => getWorldLayout(worldId), [worldId]);
   // Entorno + ambience del mundo: un solo rig paramétrico para todos los mundos.
@@ -1624,27 +1628,33 @@ export default function World3DScene({
 
   return (
     <Canvas
-      shadows
-      dpr={[1, 1.75]}
+      // Fase 7: sombras suaves PCFSoft + dpr por tier + FOV 45 (más tele = más cine).
+      shadows="soft"
+      dpr={getTierDpr(tier)}
       camera={{
         position: [spawn[0], REST_Y + 7, Math.min(spawn[1] + 10.2, amb.clampCameraZ ?? Infinity)],
-        fov: 50,
+        fov: 45,
       }}
-      gl={{ antialias: true, powerPreference: "high-performance" }}
+      // El AA lo pone el composer (SMAA/FXAA): el del canvas sobraría.
+      gl={{ antialias: false, powerPreference: "high-performance" }}
     >
       <color attach="background" args={[amb.fogColor]} />
       <fog attach="fog" args={[amb.fogColor, amb.fogNear, amb.fogFar]} />
 
-      {/* Rig de iluminación paramétrico: la ambience del mundo manda. */}
-      <ambientLight color={amb.ambientColor} intensity={amb.ambientIntensity} />
+      {/* Rig de iluminación paramétrico: la ambience del mundo manda.
+          Cine Pass: menos ambient y más sol (modelado con contraste) + CONTRALUZ. */}
+      <ambientLight color={amb.ambientColor} intensity={amb.ambientIntensity * 0.78} />
       <hemisphereLight color={amb.hemiSky} groundColor={amb.hemiGround} intensity={amb.hemiIntensity} />
       <directionalLight
+        // key por tier: el mapa de sombras solo se reconstruye al cambiar de calidad.
+        key={`sol-${tier}`}
         castShadow
         position={[sunPos.x, sunPos.y, sunPos.z]}
-        intensity={amb.sunIntensity}
+        intensity={amb.sunIntensity * 1.18}
         color={amb.sunColor}
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={tier === "alta" ? 2048 : 1024}
+        shadow-mapSize-height={tier === "alta" ? 2048 : 1024}
+        shadow-radius={6}
         shadow-camera-left={-32}
         shadow-camera-right={32}
         shadow-camera-top={32}
@@ -1652,6 +1662,10 @@ export default function World3DScene({
         shadow-camera-far={110}
         shadow-bias={-0.0004}
       />
+      {/* CONTRALUZ de cine: rim frío desde el fondo del encuadre (la cámara
+          siempre mira hacia -z), sin sombras — recorta TODAS las siluetas
+          contra el fondo, como en el vídeo canon. */}
+      <directionalLight position={[-sunPos.x * 0.5, 13, -34]} intensity={1.2} color="#8fd0ff" />
       {amb.fillIntensity > 0 && (
         <directionalLight position={[16, 12, 20]} intensity={amb.fillIntensity} color={amb.fillColor} />
       )}
@@ -1695,11 +1709,10 @@ export default function World3DScene({
         />
         <EnergyBolts bolts={bolts} setBolts={setBolts} nodes={nodes} hitsRef={hitsRef} />
 
-        {/* Postproceso: Bloom moderado + viñeta sutil (mirada cinematográfica). */}
-        <EffectComposer multisampling={4}>
-          <Bloom mipmapBlur intensity={0.55} luminanceThreshold={1} luminanceSmoothing={0.25} />
-          <Vignette eskil={false} offset={0.24} darkness={0.42} />
-        </EffectComposer>
+        {/* Fase 7 — composer cinematográfico compartido: N8AO + DoF (autofocus
+            al héroe vía posRef) + Bloom + gradación al póster + ACES + viñeta,
+            recortado por tier. Sustituye al Bloom+Vignette clásico. */}
+        <CinematicEffects tier={tier} focusRef={posRef} />
       </Suspense>
 
       <FollowCamera posRef={posRef} maxZ={amb.clampCameraZ ?? Infinity} />

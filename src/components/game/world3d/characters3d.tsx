@@ -128,6 +128,43 @@ class LimiteCargaModelo extends Component<
 }
 
 // ---------------------------------------------------------------------------
+// Rim fresnel (Fase 7 — Cine Pass): luz de borde estilo vídeo/póster inyectada
+// en el fragment shader del material estándar via onBeforeCompile. La silueta
+// del personaje se "recorta" del fondo con el acento de su clase, se mueva la
+// cámara como se mueva (es view-dependent, cosa que una luz rim fija no da).
+//
+// SOLO toca el fragment (tras <emissivemap_fragment>, con `normal` ya
+// resuelta): el vertex —y con él el SKINNING— queda intacto. La fuerza es
+// moderada (< threshold 1 del Bloom): recorte cinematográfico, no neón.
+// ---------------------------------------------------------------------------
+function inyectarRimFresnel(mat: THREE.MeshStandardMaterial, tinte: THREE.Color, fuerza: number) {
+  // Acento de clase aclarado hacia el "blanco mágico": leible sobre ropa oscura.
+  const rimColor = tinte.clone().lerp(new THREE.Color("#eaf6ff"), 0.3);
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uRimColor = { value: rimColor };
+    shader.uniforms.uRimFuerza = { value: fuerza };
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        "#include <common>\nuniform vec3 uRimColor;\nuniform float uRimFuerza;",
+      )
+      .replace(
+        "#include <emissivemap_fragment>",
+        `#include <emissivemap_fragment>
+	{
+		float rimFacing = saturate( dot( normalize( vViewPosition ), normal ) );
+		float rimFresnel = pow( 1.0 - rimFacing, 2.8 );
+		totalEmissiveRadiance += uRimColor * rimFresnel * uRimFuerza;
+	}`,
+      );
+  };
+  // Mismo código para todas las instancias → three comparte el programa GLSL
+  // (los uniforms sí son por material: cada clase con su acento).
+  mat.customProgramCacheKey = () => "nexus-rim-fresnel";
+  mat.needsUpdate = true;
+}
+
+// ---------------------------------------------------------------------------
 // Rig interno: clona el GLB, tinta materiales y gobierna el AnimationMixer.
 // ---------------------------------------------------------------------------
 function AdventurerRig({
@@ -182,6 +219,11 @@ function AdventurerRig({
           if (std.emissive) {
             std.emissive.copy(tinte);
             std.emissiveIntensity = variant === "hero" ? 0.26 : 0.18;
+          }
+          // Fase 7: luz de borde fresnel con el acento de clase (héroe más
+          // marcado; NPC/rival sutil para no robar foco).
+          if ((std as { isMeshStandardMaterial?: boolean }).isMeshStandardMaterial) {
+            inyectarRimFresnel(std, tinte, variant === "hero" ? 0.85 : 0.55);
           }
           vistos.set(mat, clon);
           clones.push(clon);

@@ -15,15 +15,35 @@ import { CuboidCollider, CylinderCollider, RigidBody } from "@react-three/rapier
 import * as THREE from "three";
 
 import {
+  makeCloudBandTexture,
+  makeFernTexture,
   makeFogTexture,
+  makeFoliageTexture,
   makeGlowTexture,
+  makeGroundDetailTexture,
   mulberry32,
   smoothstep,
   vnoise,
 } from "./BosqueEnvironment";
+import type { GroundDetailStyle } from "./BosqueEnvironment";
+import { densityScale, getQualityTierSafe, scaleCount } from "./worldConfig";
 import type { CrossingSpec } from "./worldConfig";
 
-export { mulberry32, smoothstep, vnoise, makeGlowTexture, makeFogTexture };
+export {
+  mulberry32,
+  smoothstep,
+  vnoise,
+  makeGlowTexture,
+  makeFogTexture,
+  makeFoliageTexture,
+  makeFernTexture,
+  makeGroundDetailTexture,
+  makeCloudBandTexture,
+  densityScale,
+  getQualityTierSafe,
+  scaleCount,
+};
+export type { GroundDetailStyle };
 
 // ---------------------------------------------------------------------------
 // Terreno: fábrica de funciones de altura con la forma canónica del Bosque —
@@ -78,6 +98,22 @@ export function buildCurve(points: [number, number][]) {
 // ---------------------------------------------------------------------------
 // Cielo: cúpula con gradiente + sol + estrellas opcionales. Ignora la niebla.
 // ---------------------------------------------------------------------------
+export type SkyCloudBand = {
+  count: number;
+  /** Altura de la banda. */
+  y: number;
+  /** Radio del anillo de nubes. */
+  radius: number;
+  /** Variación radial. */
+  spread?: number;
+  /** Ancho del sprite. */
+  scale: number;
+  color?: string;
+  opacity: number;
+  /** Velocidad angular (parallax lentísimo). */
+  speed?: number;
+};
+
 export type KitSkyProps = {
   zenith: string;
   mid: string;
@@ -92,6 +128,9 @@ export type KitSkyProps = {
   stars?: number;
   starColor?: string;
   starSeed?: number;
+  /** Fase 7: bandas de nubes lejanas pintadas a distintas alturas. */
+  cloudBands?: SkyCloudBand[];
+  cloudSeed?: number;
 };
 
 export function KitSky({
@@ -105,6 +144,8 @@ export function KitSky({
   stars = 0,
   starColor = "#eaf6ff",
   starSeed = 9,
+  cloudBands,
+  cloudSeed = 19,
 }: KitSkyProps) {
   const mat = useMemo(
     () =>
@@ -166,6 +207,36 @@ export function KitSky({
   }, [stars, starSeed]);
   const glowTex = useMemo(() => (stars > 0 ? makeGlowTexture() : null), [stars]);
 
+  // Fase 7: bandas de nubes pintadas con parallax lentísimo.
+  const bandTex = useMemo(() => (cloudBands?.length ? makeCloudBandTexture(cloudSeed) : null), [cloudBands, cloudSeed]);
+  const bandSprites = useMemo(() => {
+    if (!cloudBands?.length) return [];
+    const rnd = mulberry32(cloudSeed + 1);
+    return cloudBands.flatMap((band, k) =>
+      Array.from({ length: band.count }, () => ({
+        angle: rnd() * Math.PI * 2,
+        radius: band.radius + rnd() * (band.spread ?? 20),
+        y: band.y + (rnd() - 0.5) * 6,
+        scale: band.scale * (0.8 + rnd() * 0.5),
+        speed: (band.speed ?? 0.0022) * (0.7 + rnd() * 0.6),
+        opacity: band.opacity * (0.75 + rnd() * 0.4),
+        color: band.color ?? "#ffffff",
+        key: k,
+      })),
+    );
+  }, [cloudBands, cloudSeed]);
+  const bandRefs = useRef<(THREE.Sprite | null)[]>([]);
+  useFrame((state) => {
+    if (!bandSprites.length) return;
+    const t = state.clock.elapsedTime;
+    bandSprites.forEach((b, i) => {
+      const s = bandRefs.current[i];
+      if (!s) return;
+      const a = b.angle + t * b.speed;
+      s.position.set(Math.cos(a) * b.radius, b.y, Math.sin(a) * b.radius);
+    });
+  });
+
   return (
     <group>
       <mesh material={mat} renderOrder={-10}>
@@ -186,6 +257,17 @@ export function KitSky({
           />
         </points>
       )}
+      {bandSprites.map((b, i) => (
+        <sprite
+          key={i}
+          ref={(el) => (bandRefs.current[i] = el)}
+          position={[Math.cos(b.angle) * b.radius, b.y, Math.sin(b.angle) * b.radius]}
+          scale={[b.scale, b.scale * 0.26, 1]}
+          renderOrder={-8}
+        >
+          <spriteMaterial map={bandTex!} color={b.color} transparent opacity={b.opacity} depthWrite={false} fog={false} />
+        </sprite>
+      ))}
     </group>
   );
 }
@@ -265,13 +347,26 @@ export function KitGround({
   colorFn,
   seg = 110,
   pad = 40,
+  detailStyle,
+  detailSeed = 301,
+  detailRepeat = 26,
+  bumpScale = 0.06,
 }: {
   half: number;
   heightFn: (x: number, z: number) => number;
   colorFn: (x: number, z: number, y: number, out: THREE.Color) => void;
   seg?: number;
   pad?: number;
+  /** Fase 7: moteado tileable multiplicado con los vertex colors. */
+  detailStyle?: GroundDetailStyle;
+  detailSeed?: number;
+  detailRepeat?: number;
+  bumpScale?: number;
 }) {
+  const detailTex = useMemo(
+    () => (detailStyle ? makeGroundDetailTexture(detailStyle, detailSeed, detailRepeat) : null),
+    [detailStyle, detailSeed, detailRepeat],
+  );
   const geo = useMemo(() => {
     const size = (half + pad) * 2;
     const g = new THREE.PlaneGeometry(size, size, seg, seg);
@@ -295,7 +390,15 @@ export function KitGround({
   }, [half, heightFn, colorFn, seg, pad]);
   return (
     <mesh geometry={geo} receiveShadow>
-      <meshStandardMaterial vertexColors flatShading roughness={0.95} metalness={0} />
+      <meshStandardMaterial
+        vertexColors
+        flatShading
+        roughness={0.95}
+        metalness={0}
+        map={detailTex ?? undefined}
+        bumpMap={detailTex ?? undefined}
+        bumpScale={detailTex ? bumpScale : 0}
+      />
     </mesh>
   );
 }
@@ -381,6 +484,10 @@ export function FlowPlane({
   light,
   speed = 0.7,
   alpha = 0.93,
+  sunDir,
+  glint = 0,
+  glintColor = "#fff0c9",
+  foam = 0,
 }: {
   /** Ancho (x). */
   width: number;
@@ -391,46 +498,78 @@ export function FlowPlane({
   light: string;
   speed?: number;
   alpha?: number;
+  /** Fase 7: dirección del sol de la ambience (para el highlight fake). */
+  sunDir?: [number, number, number];
+  /** Intensidad del reflejo especular del sol (0 = desactivado). */
+  glint?: number;
+  glintColor?: string;
+  /** Espuma animada en las orillas (0 = desactivada). */
+  foam?: number;
 }) {
-  const mat = useMemo(
-    () =>
-      new THREE.ShaderMaterial({
-        transparent: true,
-        depthWrite: false,
-        fog: false,
-        uniforms: {
-          uTime: { value: 0 },
-          uDeep: { value: new THREE.Color(deep) },
-          uLight: { value: new THREE.Color(light) },
-          uSpeed: { value: speed },
-          uAlpha: { value: alpha },
-        },
-        vertexShader: /* glsl */ `
-          varying vec2 vUv;
-          void main() {
-            vUv = uv;
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  const mat = useMemo(() => {
+    // El highlight se ancla en uv hacia el lado del sol: la lámina está
+    // rotada -PI/2, así que uv.y crece hacia -z del mundo.
+    const sd = new THREE.Vector3(...(sunDir ?? [0, 1, 0])).normalize();
+    const spec = new THREE.Vector2(0.5 + sd.x * 0.32, 0.5 - sd.z * 0.32);
+    return new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      fog: false,
+      uniforms: {
+        uTime: { value: 0 },
+        uDeep: { value: new THREE.Color(deep) },
+        uLight: { value: new THREE.Color(light) },
+        uSpeed: { value: speed },
+        uAlpha: { value: alpha },
+        uSpec: { value: spec },
+        uGlint: { value: glint },
+        uGlintCol: { value: new THREE.Color(glintColor) },
+        uFoam: { value: foam },
+      },
+      vertexShader: /* glsl */ `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        varying vec2 vUv;
+        uniform float uTime; uniform float uSpeed; uniform float uAlpha;
+        uniform vec3 uDeep; uniform vec3 uLight;
+        uniform vec2 uSpec; uniform float uGlint; uniform vec3 uGlintCol;
+        uniform float uFoam;
+        float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }
+        void main() {
+          float flow = vUv.x * 26.0 - uTime * uSpeed;
+          float band = sin(flow + sin(vUv.y * 9.0 + uTime * 0.8) * 0.9) * 0.5 + 0.5;
+          vec3 col = mix(uDeep, uLight, band * 0.45 + 0.12);
+          vec2 cell = floor(vec2(flow * 2.2, vUv.y * 12.0));
+          float tw = step(0.94, hash(cell) * (0.75 + 0.25 * sin(uTime * 3.0 + hash(cell.yx) * 6.28)));
+          col += tw * 0.55;
+          float edge = smoothstep(0.0, 0.12, vUv.y) * smoothstep(1.0, 0.88, vUv.y);
+          float a = uAlpha * (0.35 + 0.65 * edge);
+          // Reflejo especular fake del sol: camino de brillo hacia el sol,
+          // reforzado donde la ola (band) y los destellos (tw) lo tocan.
+          if (uGlint > 0.0) {
+            vec2 d = vUv - uSpec;
+            d.x *= 1.6; // el camino de luz se estira hacia el sol
+            float glow = exp(-dot(d, d) * 14.0);
+            col += uGlintCol * glow * uGlint * (0.35 + band * 0.55 + tw * 0.6);
           }
-        `,
-        fragmentShader: /* glsl */ `
-          varying vec2 vUv;
-          uniform float uTime; uniform float uSpeed; uniform float uAlpha;
-          uniform vec3 uDeep; uniform vec3 uLight;
-          float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }
-          void main() {
-            float flow = vUv.x * 26.0 - uTime * uSpeed;
-            float band = sin(flow + sin(vUv.y * 9.0 + uTime * 0.8) * 0.9) * 0.5 + 0.5;
-            vec3 col = mix(uDeep, uLight, band * 0.45 + 0.12);
-            vec2 cell = floor(vec2(flow * 2.2, vUv.y * 12.0));
-            float tw = step(0.94, hash(cell) * (0.75 + 0.25 * sin(uTime * 3.0 + hash(cell.yx) * 6.28)));
-            col += tw * 0.55;
-            float edge = smoothstep(0.0, 0.12, vUv.y) * smoothstep(1.0, 0.88, vUv.y);
-            gl_FragColor = vec4(col, uAlpha * (0.35 + 0.65 * edge));
+          // Espuma de orillas: banda blanca ondulante en los bordes.
+          if (uFoam > 0.0) {
+            float fEdge = max(smoothstep(0.16, 0.02, vUv.y), smoothstep(0.84, 0.98, vUv.y));
+            float wob = 0.5 + 0.5 * sin(vUv.x * 64.0 + uTime * 1.9 + sin(vUv.x * 17.0 + uTime * 0.7) * 2.2);
+            float f = fEdge * (0.35 + 0.65 * wob) * uFoam;
+            col = mix(col, vec3(1.0), min(1.0, f));
+            a = max(a, f * 0.9);
           }
-        `,
-      }),
-    [deep, light, speed, alpha],
-  );
+          gl_FragColor = vec4(col, a);
+        }
+      `,
+    });
+  }, [deep, light, speed, alpha, sunDir, glint, glintColor, foam]);
   useFrame((_, dt) => {
     mat.uniforms.uTime.value += dt;
   });
@@ -487,6 +626,109 @@ export function KitGroundFog({ seed, patches }: { seed: number; patches: FogPatc
         <sprite key={i} ref={(el) => (refs.current[i] = el)} position={[b.x, b.y, b.z]} scale={[b.s, b.s * 0.5, 1]}>
           <spriteMaterial map={tex} color={b.color} transparent opacity={b.opacity} depthWrite={false} fog={false} />
         </sprite>
+      ))}
+    </group>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Fase 7 — Niebla de distancia baja: anillo de billboards grandes muy tenues
+// sobre el suelo lejano (espesa la atmósfera sin tocar la niebla de escena).
+// Estáticos: el parallax lo pone la cámara.
+// ---------------------------------------------------------------------------
+export function KitFarFog({
+  seed,
+  color,
+  count = 8,
+  radius,
+  spread = 12,
+  y = 2.2,
+  scale = 30,
+  opacity = 0.09,
+}: {
+  seed: number;
+  color: string;
+  count?: number;
+  /** Radio del anillo (típicamente groundHalf + 8..14). */
+  radius: number;
+  spread?: number;
+  y?: number;
+  scale?: number;
+  opacity?: number;
+}) {
+  const tex = useMemo(() => makeFogTexture(), []);
+  const banks = useMemo(() => {
+    const rnd = mulberry32(seed);
+    return Array.from({ length: count }, (_, i) => {
+      const a = (i / count) * Math.PI * 2 + rnd() * (Math.PI / count);
+      const r = radius + rnd() * spread;
+      return {
+        pos: [Math.cos(a) * r, y + rnd() * 2.5, Math.sin(a) * r] as [number, number, number],
+        s: scale * (0.75 + rnd() * 0.6),
+        o: opacity * (0.7 + rnd() * 0.6),
+      };
+    });
+  }, [seed, count, radius, spread, y, scale, opacity]);
+  return (
+    <group>
+      {banks.map((b, i) => (
+        <sprite key={i} position={b.pos} scale={[b.s, b.s * 0.38, 1]}>
+          <spriteMaterial map={tex} color={color} transparent opacity={b.o} depthWrite={false} fog={false} />
+        </sprite>
+      ))}
+    </group>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Fase 7 — Haces de luz volumétricos fake (conos aditivos alineados con el
+// sol de la ambience, opacidad respirando). Cero luces reales.
+// ---------------------------------------------------------------------------
+export function KitLightShafts({
+  spots,
+  sunDir,
+  color,
+  opacity = 0.07,
+  radius = 3,
+  height = 15,
+  y = 6.5,
+}: {
+  spots: [number, number][];
+  sunDir: [number, number, number];
+  color: string;
+  opacity?: number;
+  radius?: number;
+  height?: number;
+  y?: number;
+}) {
+  const refs = useRef<(THREE.Mesh | null)[]>([]);
+  const quat = useMemo(() => {
+    const q = new THREE.Quaternion();
+    q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(...sunDir).normalize());
+    return q;
+  }, [sunDir]);
+  useFrame((state) => {
+    const t = state.clock.elapsedTime;
+    refs.current.forEach((m, i) => {
+      if (!m) return;
+      (m.material as THREE.MeshBasicMaterial).opacity = opacity + Math.sin(t * 0.6 + i * 1.7) * opacity * 0.35;
+    });
+  });
+  return (
+    <group>
+      {spots.map(([x, z], i) => (
+        <mesh key={i} ref={(el) => (refs.current[i] = el)} position={[x, y, z]} quaternion={quat} renderOrder={5}>
+          <coneGeometry args={[radius, height, 12, 1, true]} />
+          <meshBasicMaterial
+            color={color}
+            transparent
+            opacity={opacity}
+            blending={THREE.AdditiveBlending}
+            side={THREE.DoubleSide}
+            depthWrite={false}
+            fog={false}
+          />
+        </mesh>
       ))}
     </group>
   );

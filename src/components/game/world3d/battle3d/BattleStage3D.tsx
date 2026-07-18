@@ -13,8 +13,10 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import * as THREE from "three";
+
+import { CinematicEffects } from "../render/CinematicEffects";
+import { getTierDpr, useQualityTier } from "../render/quality";
 
 import { getHeroLook } from "../worldConfig";
 import { StageActor, type StagePose } from "./stageActors";
@@ -569,6 +571,12 @@ export default function BattleStage3D({ variant, classId, heroColor, event }: Ba
   const cfg = STAGE_CFG[variant];
   const look = useMemo(() => getHeroLook(classId), [classId]);
   const heroHex = useMemo(() => cssColorToHex(heroColor), [heroColor]);
+  // Fase 7 (Cine Pass): tier de calidad; el fondo de batalla capa su dpr a 1.5.
+  const tier = useQualityTier();
+  const dpr = useMemo<[number, number]>(() => {
+    const [min, max] = getTierDpr(tier);
+    return [min, Math.min(max, 1.5)];
+  }, [tier]);
 
   const enemyFx = useRef<EnemyFx>(createEnemyFx());
   const shakeRef = useRef(0);
@@ -580,18 +588,22 @@ export default function BattleStage3D({ variant, classId, heroColor, event }: Ba
 
   return (
     <Canvas
-      dpr={[1, 1.5]}
+      dpr={dpr}
       camera={{ position: cfg.cam, fov: 50 }}
-      gl={{ antialias: true, powerPreference: "high-performance" }}
+      // El AA lo pone el composer (SMAA/FXAA): el del canvas sobraría.
+      gl={{ antialias: false, powerPreference: "high-performance" }}
     >
       <color attach="background" args={[cfg.bg]} />
       <fog attach="fog" args={[cfg.bg, 16, 58]} />
 
-      {/* Luz de luna fría + rebote + contraluz que recorta al enemigo */}
-      <ambientLight color={variant === "boss" ? "#5a4a78" : "#56648a"} intensity={0.72} />
+      {/* Luz de luna fría + rebote + CONTRALUCES (Cine Pass): el rim de
+          cfg.rim recorta al enemigo con fuerza y un segundo rim bajo recorta
+          la espalda del héroe en primer término (canon del vídeo). */}
+      <ambientLight color={variant === "boss" ? "#5a4a78" : "#56648a"} intensity={0.66} />
       <hemisphereLight color="#7a8fb8" groundColor="#2a2438" intensity={0.62} />
       <directionalLight position={[-6, 11, 9]} intensity={1.15} color="#9fc3ee" />
-      <directionalLight position={[4, 7, -12]} intensity={0.55} color={cfg.rim} />
+      <directionalLight position={[4, 7, -12]} intensity={1.25} color={cfg.rim} />
+      <directionalLight position={[-5, 5, -9]} intensity={0.6} color={cfg.rim} />
 
       <Suspense fallback={null}>
         <RuinsArena variant={variant} />
@@ -634,10 +646,10 @@ export default function BattleStage3D({ variant, classId, heroColor, event }: Ba
           heroRigRef={heroRig}
         />
 
-        {/* Bloom real: los emisivos ≥1.2 entran; el Vacío (~0.6) queda sordo */}
-        <EffectComposer multisampling={0}>
-          <Bloom mipmapBlur intensity={0.6} luminanceThreshold={1} luminanceSmoothing={0.3} />
-        </EffectComposer>
+        {/* Fase 7 — composer cinematográfico compartido (variant "battle"):
+            AO + DoF marcado al núcleo del enemigo + Bloom (emisivos ≥1.2; el
+            Vacío ~0.6 queda sordo) + gradación al póster + viñeta fuerte. */}
+        <CinematicEffects tier={tier} variant="battle" focusPoint={cfg.core} />
       </Suspense>
 
       <CameraRig variant={variant} shakeRef={shakeRef} />
