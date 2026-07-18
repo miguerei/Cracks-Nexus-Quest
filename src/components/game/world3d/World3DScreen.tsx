@@ -171,6 +171,12 @@ export function World3DScreen({ worldId }: { worldId: string }) {
   const [dialogue, setDialogue] = useState<ActiveDialogue | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showTip, setShowTip] = useState(false);
+  // Carta de título cinemática al entrar al mundo (estilo letrero de zona).
+  const [showTitle, setShowTitle] = useState(true);
+  useEffect(() => {
+    const id = setTimeout(() => setShowTitle(false), 3200);
+    return () => clearTimeout(id);
+  }, [worldId]);
   const handleActive = useCallback((id: string | null) => setActiveId(id), []);
 
   // Tooltip de bienvenida (una vez por navegador).
@@ -583,6 +589,42 @@ export function World3DScreen({ worldId }: { worldId: string }) {
                 />
               </div>
             )}
+
+            {/* Carta de título cinemática (letrero de zona al entrar) */}
+            <AnimatePresence>
+              {showTitle && !showTip && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.8 }}
+                  className="pointer-events-none absolute inset-x-0 top-[22%] z-40 text-center"
+                >
+                  <motion.p
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3, duration: 0.9 }}
+                    className="text-[11px] font-bold uppercase tracking-[0.5em] text-accent drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
+                  >
+                    Mundo {world.order} · {world.subject}
+                  </motion.p>
+                  <motion.h2
+                    initial={{ opacity: 0, y: 14, letterSpacing: "0.2em" }}
+                    animate={{ opacity: 1, y: 0, letterSpacing: "0.06em" }}
+                    transition={{ delay: 0.45, duration: 1.1, ease: "easeOut" }}
+                    className="mt-2 text-4xl font-black text-foreground drop-shadow-[0_3px_14px_rgba(0,0,0,0.85)] sm:text-6xl"
+                  >
+                    {world.name}
+                  </motion.h2>
+                  <motion.div
+                    initial={{ scaleX: 0 }}
+                    animate={{ scaleX: 1 }}
+                    transition={{ delay: 0.7, duration: 1 }}
+                    className="mx-auto mt-3 h-px w-56 bg-gradient-to-r from-transparent via-gold to-transparent"
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Recordatorio de controles (solo desktop, discreto) */}
             {!dialogue && !menuOpen && !showTip && (
