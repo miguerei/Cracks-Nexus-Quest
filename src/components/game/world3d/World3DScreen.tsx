@@ -23,6 +23,7 @@ import {
 import { ARTBOOK } from "@/lib/artbook";
 import { usePlayerStore } from "@/store/usePlayerStore";
 import { getWorldLayout } from "./worldConfig";
+import { QualityToggle } from "./render/QualityToggle";
 import type { Scene3DNode, World3DControls } from "./World3DScene";
 import type { DialogueChoiceOption } from "@/components/game/dialogue/types";
 
@@ -435,16 +436,19 @@ export function World3DScreen({ worldId }: { worldId: string }) {
               </div>
             )}
 
-            {/* Botón de menú (esquina superior derecha) */}
+            {/* Menú + calidad gráfica (esquina superior derecha) */}
             {!dialogue && !menuOpen && !showTip && (
-              <button
-                type="button"
-                aria-label="Abrir menú"
-                onClick={() => setMenuOpen(true)}
-                className="absolute right-3 top-3 z-30 grid h-10 w-10 place-items-center rounded-full border-2 border-primary/50 bg-background/70 text-primary backdrop-blur transition hover:scale-105 active:scale-95"
-              >
-                <Menu className="h-5 w-5" />
-              </button>
+              <div className="absolute right-3 top-3 z-30 flex items-center gap-2">
+                <QualityToggle className="rounded-full border border-primary/40 bg-background/60 px-3 py-1.5 text-xs font-semibold text-primary backdrop-blur transition hover:border-primary/70" />
+                <button
+                  type="button"
+                  aria-label="Abrir menú"
+                  onClick={() => setMenuOpen(true)}
+                  className="grid h-10 w-10 place-items-center rounded-full border-2 border-primary/50 bg-background/70 text-primary backdrop-blur transition hover:scale-105 active:scale-95"
+                >
+                  <Menu className="h-5 w-5" />
+                </button>
+              </div>
             )}
 
 
