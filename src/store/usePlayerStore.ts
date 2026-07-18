@@ -5,8 +5,11 @@ import {
   ACHIEVEMENTS,
   leagueForPoints,
   levelForXp,
+  type Concept,
   type LeagueId,
+  type Question,
 } from "@/data/game";
+import type { ContentStats } from "@/lib/content/generate";
 
 export type PlayerAvatar = {
   name: string;
@@ -59,6 +62,24 @@ export type LastReward = {
   newLevel?: number;
 };
 
+/**
+ * Contenido educativo generado a partir del documento del alumno (Fase 6).
+ * Es la fuente que el gameService consulta ANTES que el contenido estático:
+ * si existe, los retos de todos los mundos preguntan sobre este temario.
+ * Local al dispositivo: NO forma parte de RemotePlayerSnapshot (no se sube a
+ * la nube), así que applyRemote nunca lo pisa.
+ */
+export type CustomContent = {
+  /** Nombre del documento o del texto pegado. */
+  docName: string;
+  /** Fecha de generación (ISO). */
+  createdAt: string;
+  /** Stats honestas del generador (conceptos, preguntas, calidad). */
+  stats: ContentStats;
+  concepts: Concept[];
+  questionsByWorld: Record<string, Question[]>;
+};
+
 type PlayerState = {
   hasProfile: boolean;
   avatar: PlayerAvatar;
@@ -76,9 +97,12 @@ type PlayerState = {
   masteredConcepts: string[];
   attempts: MissionAttempt[];
   lastReward: LastReward | null;
+  customContent: CustomContent | null;
 
   createProfile: (avatar: PlayerAvatar) => void;
   setDocument: (name: string) => void;
+  setCustomContent: (c: CustomContent) => void;
+  clearCustomContent: () => void;
   addReward: (r: { xp?: number; crystals?: number; coins?: number; points?: number; nexos?: number }) => void;
   setStreak: (n: number) => void;
   clearWorld: (id: string) => void;
@@ -145,10 +169,14 @@ export const usePlayerStore = create<PlayerState>()(
       masteredConcepts: [],
       attempts: [],
       lastReward: null,
+      customContent: null,
 
       createProfile: (avatar) =>
         set({ hasProfile: true, avatar, xp: 50, crystals: 10, coins: 25, nexos: 1, points: 120 }),
       setDocument: (name) => set({ documentName: name }),
+      setCustomContent: (c) => set({ customContent: c, documentName: c.docName }),
+      // Volver al contenido de ejemplo: limpia el temario del alumno.
+      clearCustomContent: () => set({ customContent: null, documentName: null }),
       addReward: (r) =>
         set((s) => ({
           xp: s.xp + (r.xp ?? 0),
@@ -206,9 +234,21 @@ export const usePlayerStore = create<PlayerState>()(
           masteredConcepts: [],
           attempts: [],
           lastReward: null,
+          customContent: null,
         }),
     }),
-    { name: "nexus-quest-player", version: 3 },
+    {
+      name: "nexus-quest-player",
+      // v4 (Fase 6): añade `customContent` (temario del alumno) persistido.
+      version: 4,
+      migrate: (persisted, version) => {
+        const estado = persisted as Partial<PlayerState>;
+        // Snapshots v3 (o anteriores) no tienen customContent: se añade nulo
+        // sin tocar el resto del progreso del jugador.
+        if (version < 4) return { ...estado, customContent: null };
+        return estado;
+      },
+    },
   ),
 );
 

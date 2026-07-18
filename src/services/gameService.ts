@@ -1,9 +1,10 @@
 // Services layer: the ONLY place the UI reads game data from.
 //
-// Today it returns mock data from `@/data/game`. When Supabase + AI are
-// connected, swap the bodies here (e.g. supabase.from(...).select() or an edge
-// function) and the UI stays untouched. Routes and components MUST import game
-// data through this module, never directly from `@/data/game`.
+// Contenido educativo (Fase 6): si el alumno generó un temario propio en
+// /biblioteca (customContent en el store), los selectores de contenido lo
+// sirven con prioridad; si no, devuelven el contenido estático de ejemplo de
+// `@/data/game`. Routes and components MUST import game data through this
+// module, never directly from `@/data/game`.
 //
 // Selectors are synchronous today because the mock data lives in memory; this
 // keeps the current UX (no loading flicker) identical. The async
@@ -50,6 +51,25 @@ import {
   type AvatarItem,
   type EquationPuzzle,
 } from "@/data/game";
+import { usePlayerStore, type CustomContent } from "@/store/usePlayerStore";
+import { preguntasParaMision } from "@/lib/content/generate";
+
+// ---- Contenido personalizado (Fase 6) ----
+// El alumno puede subir SU temario en /biblioteca: el resultado del generador
+// heurístico se persiste en el store zustand (`customContent`) y aquí tiene
+// PRIORIDAD sobre el contenido estático de WORLD_CONTENT.
+//
+// PATRÓN ELEGIDO PARA SSR: gameService son funciones puras síncronas que
+// también corren en el servidor, así que leemos el snapshot del store con
+// `usePlayerStore.getState()` bajo guard de `typeof window`. En SSR no hay
+// localStorage: el servidor renderiza siempre el contenido estático y el
+// cliente lo sustituye al hidratar (las rutas de reto resuelven su contenido
+// en render de cliente vía useMemo, cuando el store ya está rehidratado de
+// localStorage de forma síncrona). Ventaja: ningún llamador cambia de firma.
+function getCustomContent(): CustomContent | null {
+  if (typeof window === "undefined") return null;
+  return usePlayerStore.getState().customContent;
+}
 
 // Missions grouped by world (all worlds are playable demo content in Fase 3).
 const MISSIONS_BY_WORLD: Record<string, Mission[]> = {
@@ -254,16 +274,36 @@ export function getWorldProgress(worldId: string, player: PlayerProgress): World
 }
 
 // ---- Learning content ----
+// Cada selector consulta primero el temario del alumno (customContent) y solo
+// si no existe cae al contenido estático de ejemplo.
 export function getQuestions(): Question[] {
+  const custom = getCustomContent();
+  if (custom) {
+    const todas = Object.values(custom.questionsByWorld).flat();
+    if (todas.length > 0) return todas;
+  }
   return MOCK_QUESTIONS;
 }
 
 export function getConcepts(): Concept[] {
+  const custom = getCustomContent();
+  if (custom && custom.concepts.length > 0) return custom.concepts;
   return MOCK_CONCEPTS;
 }
 
 export function getPuzzlePairs(): Concept[] {
+  const custom = getCustomContent();
+  if (custom && custom.concepts.length >= 4) return custom.concepts;
   return PUZZLE_PAIRS;
+}
+
+/**
+ * Conceptos del contenido de EJEMPLO, ignorando el temario del alumno.
+ * Para las vistas que enseñan explícitamente la demo (apuntes de muestra de
+ * la biblioteca), aunque haya customContent activo.
+ */
+export function getSampleConcepts(): Concept[] {
+  return MOCK_CONCEPTS;
 }
 
 // Ecuaciones de "Puentes de Ecuaciones" (Ciudad de los Algoritmos).
@@ -291,6 +331,42 @@ export function getMissionContent(missionId?: string): MissionContent {
   const mission = missionId ? getMissionById(missionId) : undefined;
   const worldId = mission ? worldOfMissionId(mission.id) : "bosque";
   const content = WORLD_CONTENT[worldId] ?? WORLD_CONTENT.bosque;
+
+  // Prioridad: temario del alumno. Cada misión recibe una selección ESTABLE
+  // del pool de su mundo (rotación por índice de misión, sin repetir pregunta
+  // dentro de la misma misión). Gating, recompensas y formas de datos no
+  // cambian: solo cambia de dónde salen preguntas y parejas.
+  const custom = getCustomContent();
+  if (custom) {
+    const indice = mission
+      ? Math.max(0, getMissions(worldId).findIndex((m) => m.id === mission.id))
+      : 0;
+    const pool = custom.questionsByWorld[worldId] ?? [];
+    let questions = preguntasParaMision(pool, indice);
+    // Documento escaso: si el pool del mundo no llega al mínimo jugable, se
+    // completa con preguntas estáticas de ejemplo (relleno ya anunciado con
+    // honestidad en la biblioteca).
+    const MIN_PREGUNTAS = 5;
+    if (questions.length < MIN_PREGUNTAS) {
+      questions = [...questions, ...content.questions.slice(0, MIN_PREGUNTAS - questions.length)];
+    }
+    // Parejas del puzzle: rotación estable de los conceptos del documento;
+    // si hay menos de 4, se completa con parejas de ejemplo.
+    let pairs: Concept[] = [];
+    const conceptos = custom.concepts;
+    if (conceptos.length > 0) {
+      const inicio = (indice * 4) % conceptos.length;
+      for (let k = 0; k < Math.min(4, conceptos.length); k++) {
+        pairs.push(conceptos[(inicio + k) % conceptos.length]);
+      }
+    }
+    if (pairs.length < 4) pairs = [...pairs, ...content.pairs].slice(0, 4);
+    // Etiqueta de concepto derivada de las preguntas reales de la misión.
+    const terminos = [...new Set(questions.map((q) => q.concept))].slice(0, 2);
+    const concept = terminos.length > 0 ? terminos.join(" y ") : custom.docName;
+    return { worldId, mission, questions, pairs, concept, title: mission?.title };
+  }
+
   return {
     worldId,
     mission,
