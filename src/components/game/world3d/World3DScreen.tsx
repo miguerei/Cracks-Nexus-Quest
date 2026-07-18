@@ -372,43 +372,10 @@ export function World3DScreen({ worldId }: { worldId: string }) {
 
   return (
     <div className="relative min-h-screen">
-      <StarField density={80} />
-      <div className="pointer-events-none fixed inset-0 -z-10">
-        <img src={ARTBOOK.keyArt} alt="" aria-hidden="true" loading="lazy" className="h-full w-full object-cover opacity-15" />
-        <div className="absolute inset-0 bg-gradient-hero opacity-80" />
-      </div>
-      <GameHud />
-      <main className="mx-auto max-w-3xl px-4 py-8">
-        <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
-          <Link to="/mapa" className="hover:text-foreground">Mapa</Link>
-          <span>/</span>
-          <span className="text-foreground">{world.name}</span>
-        </div>
-
-        <GameFrame glow="primary" className="mb-6">
-          <div className="mb-1 flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-bold uppercase tracking-widest text-accent">Mundo {world.order} · {world.subject}</span>
-            <StatusBadge status={done >= total ? "completed" : "current"} className="px-2 py-1" />
-          </div>
-          <h1 className="mb-1 flex items-center gap-2 text-3xl font-black">{world.emoji} {world.name}</h1>
-          <p className="mb-4 text-muted-foreground">Tema: {world.theme}. Explora en 3D, completa las misiones en orden y vence al jefe.</p>
-
-          <div className="mb-4">
-            <div className="mb-1 flex justify-between text-xs text-muted-foreground">
-              <span>Restauración del Núcleo</span>
-              <span>{done}/{total}</span>
-            </div>
-            <div className="h-2.5 overflow-hidden rounded-full bg-muted">
-              <motion.div className="h-full rounded-full bg-gradient-energy glow-energy" animate={{ width: `${total ? (done / total) * 100 : 0}%` }} />
-            </div>
-          </div>
-
-          <NovaBubble message={nova.message} mood={nova.mood} />
-        </GameFrame>
-
-        {/* Escena 3D jugable + HUD */}
-        <div className="mb-6">
-          <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl border-2 border-primary/30 bg-background shadow-deep sm:aspect-video">
+      {/* Modo VIDEOJUEGO: la escena ocupa TODO el viewport; la web desaparece
+          y solo queda el HUD del juego superpuesto (como Zelda/Kena). */}
+      <main className="fixed inset-0 z-0">
+        <div className="relative h-full w-full overflow-hidden bg-background">
             <ClientOnly fallback={<CanvasLoading />}>
               <SceneBoundary fallback={<div className="absolute inset-0"><PlayableWorldScreen worldId={worldId} /></div>}>
                 <Suspense fallback={<CanvasLoading />}>
@@ -426,6 +393,41 @@ export function World3DScreen({ worldId }: { worldId: string }) {
                 </Suspense>
               </SceneBoundary>
             </ClientOnly>
+
+            {/* HUD superior izquierdo: volver + mundo + Restauración del Núcleo */}
+            {!dialogue && !menuOpen && !showTip && (
+              <div className="absolute left-3 top-3 z-30 flex items-center gap-2">
+                <Link
+                  to="/mapa"
+                  aria-label="Volver al mapa"
+                  className="grid h-10 w-10 place-items-center rounded-full border-2 border-border/70 bg-background/60 text-muted-foreground backdrop-blur transition hover:scale-105 hover:text-foreground"
+                >
+                  <ArrowLeft className="h-5 w-5" />
+                </Link>
+                <div className="rounded-2xl border border-border/70 bg-background/60 px-3 py-1.5 backdrop-blur">
+                  <p className="text-sm font-black leading-tight">{world.emoji} {world.name}</p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <div className="h-1.5 w-28 overflow-hidden rounded-full bg-muted">
+                      <motion.div
+                        className="h-full rounded-full bg-gradient-energy"
+                        animate={{ width: `${total ? (done / total) * 100 : 0}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] font-bold text-muted-foreground">{done}/{total}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Nova: compañera de viaje, como bocadillo de juego (no de web) */}
+            {!dialogue && !menuOpen && !showTip && (
+              <div className="pointer-events-none absolute bottom-20 left-1/2 z-20 w-full max-w-md -translate-x-1/2 px-4 sm:bottom-6 sm:left-auto sm:right-20 sm:translate-x-0">
+                <div className="rounded-2xl border border-primary/30 bg-background/70 px-3 py-2 backdrop-blur">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-accent">Nova</p>
+                  <p className="text-xs leading-snug text-foreground/90">{nova.message}</p>
+                </div>
+              </div>
+            )}
 
             {/* Botón de menú (esquina superior derecha) */}
             {!dialogue && !menuOpen && !showTip && (
@@ -581,64 +583,14 @@ export function World3DScreen({ worldId }: { worldId: string }) {
                 />
               </div>
             )}
+
+            {/* Recordatorio de controles (solo desktop, discreto) */}
+            {!dialogue && !menuOpen && !showTip && (
+              <p className="pointer-events-none absolute bottom-1.5 left-1/2 z-10 hidden -translate-x-1/2 text-[10px] text-foreground/40 lg:block">
+                WASD moverse · Espacio saltar · F lanzar · E interactuar · Esc menú
+              </p>
+            )}
           </div>
-          <p className="mt-2 text-center text-xs text-muted-foreground">
-            Muévete con WASD / flechas o el joystick · salta con Espacio · lanza con F · menú con Esc · acción con E
-          </p>
-        </div>
-
-
-        <h2 className="mb-3 text-lg font-black">Sendero de misiones</h2>
-        <div className="relative space-y-4">
-          {missions.map((m, idx) => {
-            const Icon = ICONS[m.kind];
-            const cleared = m.status === "completed";
-            const locked = m.status === "locked";
-            const isBoss = m.kind === "boss";
-            const glow = locked ? "none" : isBoss ? "violet" : cleared ? "energy" : "primary";
-            return (
-              <motion.div key={m.id} initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.06 }}>
-                <GameFrame glow={glow} className={`group flex flex-col gap-3 sm:flex-row sm:items-center ${locked ? "opacity-70" : "transition hover:border-primary/60"}`}>
-                  <span className={`grid h-16 w-16 shrink-0 place-items-center rounded-2xl text-primary-foreground bevel-highlight ${locked ? "bg-fog-void grayscale" : GRADS[m.kind]}`}>
-                    {locked ? <Lock className="h-6 w-6 text-muted-foreground" /> : <Icon className="h-7 w-7" />}
-                  </span>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{isBoss ? "Jefe final" : `Misión ${m.n}`}</p>
-                      {cleared && <StatusBadge status="completed" label="Completada" />}
-                      {locked && <StatusBadge status="locked" label="Bloqueada" />}
-                    </div>
-                    <p className="text-lg font-bold">{m.title}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {locked
-                        ? isBoss
-                          ? "El jefe sigue protegido por la niebla del Vacío. Completa las 4 misiones anteriores."
-                          : "Completa la misión anterior para abrir este sendero."
-                        : m.objective}
-                    </p>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                      <span className="rounded-full bg-background/60 px-2 py-1">{m.npcEmoji} {m.npc}</span>
-                      <span className="rounded-full bg-background/60 px-2 py-1 text-accent">🧠 {m.concept}</span>
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-background/60 px-2 py-1 font-bold text-gold">
-                        <CrystalIcon kind={isBoss ? "key" : "crystal"} size="sm" glow={false} className="h-5 w-5 rounded-lg" />
-                        {m.reward}
-                      </span>
-                    </div>
-                  </div>
-                  {locked ? (
-                    <span className="inline-flex cursor-not-allowed items-center justify-center gap-2 rounded-2xl border border-border bg-background/40 px-5 py-3 font-bold text-muted-foreground">
-                      <Lock className="h-4 w-4" /> Bloqueado
-                    </span>
-                  ) : (
-                    <GameButton asChild variant={isBoss ? "void" : "primary"}>
-                      <Link to={m.route} search={{ m: m.id }}>{cleared ? "Repetir" : "Jugar"}</Link>
-                    </GameButton>
-                  )}
-                </GameFrame>
-              </motion.div>
-            );
-          })}
-        </div>
       </main>
     </div>
   );
