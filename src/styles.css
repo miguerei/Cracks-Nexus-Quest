@@ -1,0 +1,212 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+
+  --color-gold: var(--gold);
+  --color-gold-foreground: var(--gold-foreground);
+  --color-energy: var(--energy);
+  --color-energy-foreground: var(--energy-foreground);
+  --color-violet: var(--violet);
+  --color-void: var(--void);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --font-display: "Orbitron", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Rajdhani", ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  --radius: 1rem;
+
+  /* Nexus is a dark, glowing sci-fi universe: dark by default */
+  --background: oklch(0.16 0.045 275);
+  --foreground: oklch(0.97 0.01 250);
+
+  --card: oklch(0.22 0.055 274);
+  --card-foreground: oklch(0.97 0.01 250);
+  --popover: oklch(0.2 0.05 274);
+  --popover-foreground: oklch(0.97 0.01 250);
+
+  /* Azul electrico */
+  --primary: oklch(0.68 0.19 250);
+  --primary-foreground: oklch(0.14 0.04 275);
+
+  /* Violeta */
+  --secondary: oklch(0.55 0.22 300);
+  --secondary-foreground: oklch(0.98 0.01 250);
+
+  --muted: oklch(0.28 0.05 275);
+  --muted-foreground: oklch(0.72 0.04 265);
+
+  --accent: oklch(0.62 0.2 190);
+  --accent-foreground: oklch(0.14 0.04 275);
+
+  --destructive: oklch(0.63 0.24 20);
+  --destructive-foreground: oklch(0.98 0.01 250);
+
+  --border: oklch(0.4 0.08 275 / 40%);
+  --input: oklch(0.4 0.08 275 / 45%);
+  --ring: oklch(0.68 0.19 250);
+
+  /* Extra game tokens */
+  --gold: oklch(0.82 0.16 85);
+  --gold-foreground: oklch(0.18 0.05 275);
+  --energy: oklch(0.78 0.19 150);
+  --energy-foreground: oklch(0.16 0.05 275);
+  --violet: oklch(0.6 0.24 300);
+  --void: oklch(0.5 0.2 330);
+
+  --chart-1: oklch(0.68 0.19 250);
+  --chart-2: oklch(0.62 0.2 190);
+  --chart-3: oklch(0.6 0.24 300);
+  --chart-4: oklch(0.82 0.16 85);
+  --chart-5: oklch(0.78 0.19 150);
+
+  --sidebar: oklch(0.19 0.05 275);
+  --sidebar-foreground: oklch(0.97 0.01 250);
+  --sidebar-primary: oklch(0.68 0.19 250);
+  --sidebar-primary-foreground: oklch(0.14 0.04 275);
+  --sidebar-accent: oklch(0.28 0.05 275);
+  --sidebar-accent-foreground: oklch(0.97 0.01 250);
+  --sidebar-border: oklch(0.4 0.08 275 / 40%);
+  --sidebar-ring: oklch(0.68 0.19 250);
+
+  /* Gradients & glows */
+  --gradient-nexus: linear-gradient(135deg, oklch(0.68 0.19 250), oklch(0.6 0.24 300));
+  --gradient-energy: linear-gradient(135deg, oklch(0.62 0.2 190), oklch(0.78 0.19 150));
+  --gradient-gold: linear-gradient(135deg, oklch(0.82 0.16 85), oklch(0.72 0.18 55));
+  --gradient-void: linear-gradient(135deg, oklch(0.5 0.2 330), oklch(0.4 0.15 300));
+  --gradient-hero: radial-gradient(ellipse at top, oklch(0.3 0.12 285), oklch(0.14 0.04 275) 70%);
+  --glow-primary: 0 0 40px -8px oklch(0.68 0.19 250 / 60%);
+  --glow-violet: 0 0 40px -8px oklch(0.6 0.24 300 / 60%);
+  --glow-gold: 0 0 40px -8px oklch(0.82 0.16 85 / 60%);
+  --glow-energy: 0 0 40px -8px oklch(0.78 0.19 150 / 60%);
+  --shadow-deep: 0 24px 60px -20px oklch(0.08 0.04 275 / 80%);
+
+  /* Fase 1.2-A — Rareza de recompensa (azul / violeta / dorado del Art Bible) */
+  --gradient-rare-blue: linear-gradient(160deg, oklch(0.72 0.17 240), oklch(0.55 0.2 255));
+  --gradient-rare-violet: linear-gradient(160deg, oklch(0.64 0.24 300), oklch(0.48 0.22 315));
+  --gradient-rare-gold: linear-gradient(160deg, oklch(0.86 0.15 90), oklch(0.7 0.18 60));
+  --glow-rare-blue: 0 0 28px -6px oklch(0.72 0.17 240 / 70%);
+  --glow-rare-violet: 0 0 28px -6px oklch(0.64 0.24 300 / 70%);
+  --glow-rare-gold: 0 0 30px -6px oklch(0.86 0.15 90 / 75%);
+
+  /* Niebla del Vacío (bloqueo / Zumbra) y marco metálico biselado del HUD */
+  --gradient-fog-void: radial-gradient(ellipse at center, oklch(0.4 0.18 320 / 55%), oklch(0.16 0.06 300 / 20%) 70%);
+  --frame-metal: linear-gradient(150deg, oklch(0.62 0.08 260 / 60%), oklch(0.3 0.05 275 / 40%));
+  --bevel-highlight: inset 0 1px 0 0 oklch(0.9 0.03 250 / 25%), inset 0 -2px 6px -2px oklch(0.08 0.04 275 / 60%);
+}
+
+/* App is always dark themed */
+.dark {
+  --background: oklch(0.16 0.045 275);
+  --foreground: oklch(0.97 0.01 250);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: var(--font-display);
+    letter-spacing: 0.01em;
+  }
+}
+
+@layer utilities {
+  .text-gradient-nexus {
+    background: var(--gradient-nexus);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .bg-gradient-nexus { background: var(--gradient-nexus); }
+  .bg-gradient-energy { background: var(--gradient-energy); }
+  .bg-gradient-gold { background: var(--gradient-gold); }
+  .bg-gradient-void { background: var(--gradient-void); }
+  .bg-gradient-hero { background: var(--gradient-hero); }
+  .glow-primary { box-shadow: var(--glow-primary); }
+  .glow-violet { box-shadow: var(--glow-violet); }
+  .glow-gold { box-shadow: var(--glow-gold); }
+  .glow-energy { box-shadow: var(--glow-energy); }
+  .shadow-deep { box-shadow: var(--shadow-deep); }
+
+  /* Fase 1.2-A — rareza, niebla del Vacío y marco metálico biselado */
+  .bg-rare-blue { background: var(--gradient-rare-blue); }
+  .bg-rare-violet { background: var(--gradient-rare-violet); }
+  .bg-rare-gold { background: var(--gradient-rare-gold); }
+  .glow-rare-blue { box-shadow: var(--glow-rare-blue); }
+  .glow-rare-violet { box-shadow: var(--glow-rare-violet); }
+  .glow-rare-gold { box-shadow: var(--glow-rare-gold); }
+  .bg-fog-void { background: var(--gradient-fog-void); }
+  .frame-metal { background: var(--frame-metal); }
+  .bevel-highlight { box-shadow: var(--bevel-highlight); }
+}
+
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+.animate-float-slow { animation: float-slow 6s ease-in-out infinite; }
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+.animate-pulse-glow { animation: pulse-glow 3s ease-in-out infinite; }
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 1; }
+}
