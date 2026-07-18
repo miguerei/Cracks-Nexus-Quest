@@ -8,6 +8,11 @@
 // Art pass AAA (Fase 4-B): el Bosque monta BosqueEnvironment (cielo, montañas,
 // río, ruinas, fauna…), héroe estilizado con andar expresivo, Nova con
 // comportamiento propio, iluminación cálida y Bloom real por postproceso.
+//
+// Fase 6: héroe, NPC y rival usan los modelos KayKit Adventurers (CC0) con
+// esqueleto y clips reales vía <Adventurer> (characters3d.tsx). El HeroModel
+// procedural sigue vivo como fallback automático de carga/error y como
+// contrato para battle3d. Nova NO cambia: es canon propio del vídeo.
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
@@ -31,6 +36,7 @@ import {
   type WorldLayout,
 } from "./worldConfig";
 import { getWorldEnvironment, getWorldAmbience } from "./environments";
+import { Adventurer } from "./characters3d";
 
 /** Estado de un nodo interactuable, tal y como lo consume la escena 3D. */
 export type Scene3DNode = {
@@ -845,8 +851,10 @@ function Hero({
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
   const castCooldown = useRef(0);
-  // Tiempo restante de la pose de lanzamiento; HeroModel lo consume y decrementa.
+  // Tiempo restante de la pose de lanzamiento; el modelo lo consume y decrementa.
   const castTimeRef = useRef(0);
+  // true mientras el héroe está en el aire (lo deriva el grounded de la física).
+  const airborneRef = useRef(false);
 
   // Teclado.
   useEffect(() => {
@@ -931,6 +939,7 @@ function Hero({
     facingRef.current = facing.current;
 
     const grounded = t.y <= REST_Y + 0.14 && Math.abs(vel.y) < 2.2;
+    airborneRef.current = !grounded;
     const wantJump = !paused && (keys.current.jump || c.jump);
     if (wantJump && grounded) {
       b.setLinvel({ x: mx * SPEED, y: JUMP_V, z: mz * SPEED }, true);
@@ -981,19 +990,51 @@ function Hero({
       type="dynamic"
     >
       <CapsuleCollider args={[0.6, 0.45]} />
-      {/* Origen del modelo (cadera) a 0.86 del suelo: pies apoyados. */}
-      <group position={[0, -0.19, 0]}>
-        <HeroModel
-          bodyColor={heroColor}
-          accent={look.accent}
-          look={look}
-          variant="hero"
-          speedRef={speedRef}
-          facingRef={facingRef}
-          classId={classId}
-          castTimeRef={castTimeRef}
-        />
-      </group>
+      {/* Fase 6: aventurero KayKit animado. Su origen está en los PIES, así que
+          baja al fondo de la cápsula (-1.05). El HeroModel procedural (origen
+          en la CADERA, pies a -0.86) queda como fallback de carga y de error. */}
+      <Suspense
+        fallback={
+          <group position={[0, -0.19, 0]}>
+            <HeroModel
+              bodyColor={heroColor}
+              accent={look.accent}
+              look={look}
+              variant="hero"
+              speedRef={speedRef}
+              facingRef={facingRef}
+              classId={classId}
+              castTimeRef={castTimeRef}
+            />
+          </group>
+        }
+      >
+        <group position={[0, -1.05, 0]}>
+          <Adventurer
+            mode="world"
+            classId={classId}
+            variant="hero"
+            speedRef={speedRef}
+            airborneRef={airborneRef}
+            facingRef={facingRef}
+            castTimeRef={castTimeRef}
+            fallback={
+              <group position={[0, 0.86, 0]}>
+                <HeroModel
+                  bodyColor={heroColor}
+                  accent={look.accent}
+                  look={look}
+                  variant="hero"
+                  speedRef={speedRef}
+                  facingRef={facingRef}
+                  classId={classId}
+                  castTimeRef={castTimeRef}
+                />
+              </group>
+            }
+          />
+        </group>
+      </Suspense>
     </RigidBody>
   );
 }
@@ -1358,12 +1399,38 @@ function Node3D({
       )}
       {isHumanoid ? (
         <group ref={g} position={[0, 0.9, 0]}>
-          <HeroModel
-            bodyColor={node.type === "rival" ? "#7c1d3f" : "#274b6b"}
-            accent={color}
-            look={node.type === "rival" ? RIVAL_LOOK : NPC_LOOK}
-            variant={node.type === "rival" ? "rival" : "npc"}
-          />
+          {/* Fase 6: NPC (Mage guía) y rival (Rogue rosa) en KayKit, con el
+              HeroModel clásico como fallback de carga/error. El Adventurer
+              tiene el origen en los pies: se baja 0.86 (donde el clásico
+              apoyaba los suyos). */}
+          <Suspense
+            fallback={
+              <HeroModel
+                bodyColor={node.type === "rival" ? "#7c1d3f" : "#274b6b"}
+                accent={color}
+                look={node.type === "rival" ? RIVAL_LOOK : NPC_LOOK}
+                variant={node.type === "rival" ? "rival" : "npc"}
+              />
+            }
+          >
+            <group position={[0, -0.86, 0]}>
+              <Adventurer
+                mode="world"
+                variant={node.type === "rival" ? "rival" : "npc"}
+                accent={color}
+                fallback={
+                  <group position={[0, 0.86, 0]}>
+                    <HeroModel
+                      bodyColor={node.type === "rival" ? "#7c1d3f" : "#274b6b"}
+                      accent={color}
+                      look={node.type === "rival" ? RIVAL_LOOK : NPC_LOOK}
+                      variant={node.type === "rival" ? "rival" : "npc"}
+                    />
+                  </group>
+                }
+              />
+            </group>
+          </Suspense>
           {active && (
             <mesh position={[0, 1.75, 0]}>
               <sphereGeometry args={[0.14, 10, 10]} />
@@ -1643,4 +1710,7 @@ export default function World3DScene({
 
 // Contratos para otros módulos (World3DScreen, rutas reto.*): named exports
 // además del default. NUNCA cambiar sus props de forma no aditiva.
+// Fase 6: se re-exporta Adventurer (personajes KayKit animados) para la oleada
+// de batalla; su contrato canónico vive en ./characters3d.
 export { HeroModel, VisibilityFrameDriver, NovaCompanion };
+export { Adventurer, type AdventurerProps, type AdventurerPose } from "./characters3d";
