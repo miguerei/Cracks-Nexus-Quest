@@ -27,6 +27,10 @@ const stripTsdSourceFromR3F = () => ({
 
 export default defineConfig({
   vite: { plugins: [stripTsdSourceFromR3F()] },
+  // Despliegue en Vercel: Nitro genera la salida en formato Build Output API
+  // (.vercel/output) que Vercel sirve de forma nativa, en vez del preset
+  // Cloudflare por defecto de Lovable.
+  nitro: { preset: "vercel" },
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this
