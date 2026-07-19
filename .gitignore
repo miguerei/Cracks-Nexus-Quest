@@ -30,3 +30,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local env (claves publishable; no subir)
+.env
+.env.*
+!.env.example
+
+# Vercel build output
+.vercel
