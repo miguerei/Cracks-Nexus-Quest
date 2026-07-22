@@ -20,6 +20,19 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/reto/arena")({
+  head: () => {
+    const title = "Arena de Oleadas — Nexus Quest";
+    const desc =
+      "Derrota oleada tras oleada de Sombras del Vacío respondiendo bien antes de quedarte sin corazones en Cracks Academy: Nexus Quest.";
+    return {
+      meta: [
+        { title },
+        { name: "description", content: desc },
+        { property: "og:title", content: title },
+        { property: "og:description", content: desc },
+      ],
+    };
+  },
   validateSearch: (s: Record<string, unknown>): { m?: string } => ({
     m: typeof s.m === "string" ? s.m : undefined,
   }),
@@ -62,31 +75,37 @@ function WaveArena() {
     if (picked !== null) return;
     setPicked(idx);
     const ok = idx === q.answer;
+    // [A1] El setTimeout de abajo corre con un closure viejo (hp/picked/correct
+    // stale — con 1 corazón un ACIERTO te mataba): el resultado se calcula
+    // aquí en locales y viaja a next() por argumento.
+    const hpNew = ok ? hp : Math.max(0, hp - 1);
+    const correctNew = ok ? correct + 1 : correct;
+    const bestNew = ok ? Math.max(best, streak + 1) : best;
+    const masteredNew = ok ? [...mastered, q.concept] : mastered;
+    const weakNew = ok ? weak : [...weak, q.concept];
     if (ok) {
       setDefeated(true);
-      setCorrect((c) => c + 1);
-      const ns = streak + 1;
-      setStreak(ns);
-      setBest((b) => Math.max(b, ns));
-      setMastered((m) => [...m, q.concept]);
+      setCorrect(correctNew);
+      setStreak(streak + 1);
+      setBest(bestNew);
+      setMastered(masteredNew);
       setFeedback({ kind: "hit", text: hitFeedback(q.concept, "Enemigo derribado"), key: Date.now() });
       toast.success(`¡Oleada ${i + 1} superada!`);
     } else {
-      setHp((h) => Math.max(0, h - 1));
+      setHp(hpNew);
       setStreak(0);
-      setWeak((w) => [...w, q.concept]);
+      setWeak(weakNew);
       setFeedback({ kind: "miss", text: missFeedback(q.concept, "El Vacío avanza"), key: Date.now() });
     }
     // Evento del escenario 3D (solo presentación, la lógica no cambia):
     // sin corazones → derrota; última oleada → según mayoría de aciertos;
     // el resto → hechizo (la horda retrocede) o pulso del Vacío.
-    const dead = !ok && hp - 1 <= 0;
+    const dead = hpNew <= 0;
     const last = i + 1 >= WAVES.length;
-    const finalCorrect = correct + (ok ? 1 : 0);
     const kind: BattleEvent["kind"] = dead
       ? "defeat"
       : last
-        ? finalCorrect >= Math.ceil(WAVES.length / 2)
+        ? correctNew >= Math.ceil(WAVES.length / 2)
           ? "victory"
           : "defeat"
         : ok
@@ -94,21 +113,19 @@ function WaveArena() {
           : "miss";
     setStageEvent((e) => ({ kind, n: e.n + 1 }));
     sfx.battle(kind);
-    setTimeout(next, 900);
+    setTimeout(() => next({ end: dead || last, correctNew, bestNew, masteredNew, weakNew }), 900);
   }
 
-  function next() {
-    const dead = hp - 1 <= 0 && picked !== q.answer;
-    const last = i + 1 >= WAVES.length;
-    if (dead || last) {
+  function next(o: { end: boolean; correctNew: number; bestNew: number; masteredNew: string[]; weakNew: string[] }) {
+    if (o.end) {
       finish({
         game: content.title ?? "Arena de Oleadas",
-        correct,
+        correct: o.correctNew,
         total: WAVES.length,
-        bestStreak: best,
+        bestStreak: o.bestNew,
         difficulty: 1.4,
-        mastered,
-        weak,
+        mastered: o.masteredNew,
+        weak: o.weakNew,
         missionId: missionId ?? "m4",
       });
       return;

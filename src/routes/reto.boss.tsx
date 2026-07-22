@@ -20,6 +20,19 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/reto/boss")({
+  head: () => {
+    const title = "Batalla contra el Jefe — Nexus Quest";
+    const desc =
+      "Enfréntate al jefe del mundo: acierta las cartas-respuesta, agota su núcleo y libera el mundo en Cracks Academy: Nexus Quest.";
+    return {
+      meta: [
+        { title },
+        { name: "description", content: desc },
+        { property: "og:title", content: title },
+        { property: "og:description", content: desc },
+      ],
+    };
+  },
   validateSearch: (s: Record<string, unknown>): { m?: string } => ({
     m: typeof s.m === "string" ? s.m : undefined,
   }),
@@ -70,53 +83,63 @@ function BossBattle() {
     if (picked !== null) return;
     setPicked(idx);
     const ok = idx === q.answer;
+    // [C2] El setTimeout de abajo corre con un closure viejo: el estado de
+    // React aún no refleja esta respuesta. Todo el resultado se calcula aquí
+    // en locales y viaja a next() por argumento (patrón de reto.puzzle).
+    const bossHpNew = ok ? bossHp - 1 : bossHp;
+    const playerHpNew = ok ? playerHp : playerHp - 1;
+    const correctNew = ok ? correct + 1 : correct;
+    const bestNew = ok ? Math.max(best, streak + 1) : best;
+    const masteredNew = ok ? [...mastered, q.concept] : mastered;
+    const weakNew = ok ? weak : [...weak, q.concept];
     if (ok) {
-      setBossHp((h) => h - 1);
-      setCorrect((c) => c + 1);
-      const ns = streak + 1;
-      setStreak(ns);
-      setBest((b) => Math.max(b, ns));
-      setMastered((m) => [...m, q.concept]);
+      setBossHp(bossHpNew);
+      setCorrect(correctNew);
+      setStreak(streak + 1);
+      setBest(bestNew);
+      setMastered(masteredNew);
       setFeedback({ kind: "hit", text: hitFeedback(q.concept, "Golpe crítico"), key: Date.now() });
       toast.success("¡Golpe crítico! Zumbra se debilita");
     } else {
-      setPlayerHp((h) => h - 1);
+      setPlayerHp(playerHpNew);
       setStreak(0);
       setShake(true);
-      setWeak((w) => [...w, q.concept]);
+      setWeak(weakNew);
       setFeedback({ kind: "miss", text: missFeedback(q.concept, "Zumbra contraataca"), key: Date.now() });
       setTimeout(() => setShake(false), 500);
     }
-    // Evento del escenario 3D (solo presentación, la lógica no cambia):
-    // núcleo destruido → victoria; sin corazones o preguntas agotadas → derrota.
+    // Núcleo destruido → victoria; sin corazones o preguntas agotadas → derrota.
     const last = i + 1 >= QS.length;
-    const bossDown = ok && bossHp - 1 <= 0;
-    const playerDown = !ok && playerHp - 1 <= 0;
-    const kind: BattleEvent["kind"] = bossDown
-      ? "victory"
-      : playerDown || (last && !ok)
-        ? "defeat"
-        : ok
-          ? "cast"
-          : "miss";
+    const victory = bossHpNew <= 0;
+    const defeated = playerHpNew <= 0 || (last && !victory);
+    const kind: BattleEvent["kind"] = victory ? "victory" : defeated ? "defeat" : ok ? "cast" : "miss";
     setStageEvent((e) => ({ kind, n: e.n + 1 }));
     sfx.battle(kind);
-    setTimeout(next, 950);
+    setTimeout(() => next({ victory, defeated, correctNew, bestNew, masteredNew, weakNew }), 950);
   }
 
-  function next() {
-    const last = i + 1 >= QS.length;
-    if (last || bossHp - 1 <= 0 || playerHp <= 0) {
+  function next(o: {
+    victory: boolean;
+    defeated: boolean;
+    correctNew: number;
+    bestNew: number;
+    masteredNew: string[];
+    weakNew: string[];
+  }) {
+    if (o.victory || o.defeated) {
       finish({
         game: content.title ?? "Boss Zumbra",
-        correct: bossHp - 1 <= 0 ? QS.length : correct,
+        correct: o.correctNew,
         total: QS.length,
-        bestStreak: best,
+        bestStreak: o.bestNew,
         difficulty: 1.5,
-        mastered,
-        weak,
+        mastered: o.masteredNew,
+        weak: o.weakNew,
         worldId: getWorldOfMission(missionId ?? "m5"),
         missionId: missionId ?? "m5",
+        // [C1] En derrota se paga XP de consolación honesto, pero la misión y
+        // el mundo NO se marcan como completados.
+        victory: o.victory,
       });
       return;
     }

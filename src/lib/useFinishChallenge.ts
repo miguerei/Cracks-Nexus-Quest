@@ -28,10 +28,19 @@ export function useFinishChallenge() {
     weak?: string[];
     worldId?: string;
     missionId?: string;
+    /**
+     * [C1] Whether the player actually beat the challenge. Defaults to true so
+     * existing callers (e.g. reto.puzzle, which can only end in victory) keep
+     * working. On defeat the player still earns their honest consolation XP
+     * (rewards scale with `correct`), but the mission/world must NOT be marked
+     * as cleared — losing to the boss no longer unlocks the next world.
+     */
+    victory?: boolean;
   }) {
     // Read + mutate the store imperatively. This is an event callback, so it
     // must not subscribe the calling component to store updates.
     const store = usePlayerStore.getState();
+    const victory = opts.victory ?? true;
 
     const r = computeRewards(opts);
     const nexos = r.perfect ? 1 : 0;
@@ -57,15 +66,17 @@ export function useFinishChallenge() {
     store.recordAttempt(attempt);
     // Mirror to the real Cloud history (no-op when playing as guest).
     logMissionAttempt(attempt);
-    if (opts.missionId) store.clearMission(opts.missionId);
-    if (opts.worldId) store.clearWorld(opts.worldId);
+    // Completion is gated on victory: a defeat records the attempt and pays
+    // consolation rewards, but never clears the mission nor unlocks the world.
+    if (victory && opts.missionId) store.clearMission(opts.missionId);
+    if (victory && opts.worldId) store.clearWorld(opts.worldId);
 
     // Achievements
     store.unlockAchievement("a1"); // primer reto
     if (opts.bestStreak >= 5) store.unlockAchievement("a2");
     if (prevCrystals + r.crystals >= 100) store.unlockAchievement("a3");
     if (r.perfect) store.unlockAchievement("a5");
-    if (opts.worldId === "bosque") store.unlockAchievement("a4");
+    if (victory && opts.worldId === "bosque") store.unlockAchievement("a4");
     if (levelForXp(prevXp + r.xp) >= 5) store.unlockAchievement("a6"); // alcanza nivel 5
 
     // Detect a level-up so /recompensa can celebrate progression.

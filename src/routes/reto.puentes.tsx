@@ -16,6 +16,19 @@ import { cn } from "@/lib/utils";
 const EQUATIONS = getAlgoritmosEquations();
 
 export const Route = createFileRoute("/reto/puentes")({
+  head: () => {
+    const title = "Puentes de Ecuaciones — Nexus Quest";
+    const desc =
+      "Despeja la incógnita de cada ecuación y tiende el puente para cruzar el abismo lógico en Cracks Academy: Nexus Quest.";
+    return {
+      meta: [
+        { title },
+        { name: "description", content: desc },
+        { property: "og:title", content: title },
+        { property: "og:description", content: desc },
+      ],
+    };
+  },
   validateSearch: (s: Record<string, unknown>): { m?: string } => ({
     m: typeof s.m === "string" ? s.m : undefined,
   }),
@@ -44,27 +57,31 @@ function EquationBridges() {
     if (picked !== null) return;
     setPicked(idx);
     const ok = idx === eq.answer;
+    // [A1] El setTimeout de abajo corre con un closure viejo (correct/best
+    // stale — el perfecto era imposible): el resultado se calcula aquí en
+    // locales y viaja a next() por argumento.
+    const correctNew = ok ? correct + 1 : correct;
+    const bestNew = ok ? Math.max(best, streak + 1) : best;
     if (ok) {
-      const ns = streak + 1;
-      setStreak(ns);
-      setBest((b) => Math.max(b, ns));
-      setCorrect((c) => c + 1);
+      setStreak(streak + 1);
+      setBest(bestNew);
+      setCorrect(correctNew);
       setSegments((s) => s + 1);
       setFeedback({ kind: "hit", text: hitFeedback("Ecuaciones", "Puente tendido"), key: Date.now() });
     } else {
       setStreak(0);
       setFeedback({ kind: "miss", text: missFeedback("Ecuaciones", "El puente se tambalea"), key: Date.now() });
     }
-    setTimeout(next, 950);
+    setTimeout(() => next({ last: i + 1 >= total, correctNew, bestNew }), 950);
   }
 
-  function next() {
-    if (i + 1 >= total) {
+  function next(o: { last: boolean; correctNew: number; bestNew: number }) {
+    if (o.last) {
       finish({
         game: "Puentes de Ecuaciones",
-        correct,
+        correct: o.correctNew,
         total,
-        bestStreak: best,
+        bestStreak: o.bestNew,
         difficulty: 1.2,
         mastered: ["Ecuaciones y despejes"],
         missionId: missionId ?? "a1",

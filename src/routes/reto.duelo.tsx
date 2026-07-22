@@ -19,6 +19,19 @@ import { MusicToggle } from "@/components/game/world3d/MusicToggle";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/reto/duelo")({
+  head: () => {
+    const title = "Carrera de Portales — Nexus Quest";
+    const desc =
+      "Cruza cada portal respondiendo antes de que se agote el tiempo y llega el primero a la meta en Cracks Academy: Nexus Quest.";
+    return {
+      meta: [
+        { title },
+        { name: "description", content: desc },
+        { property: "og:title", content: title },
+        { property: "og:description", content: desc },
+      ],
+    };
+  },
   validateSearch: (s: Record<string, unknown>): { m?: string } => ({
     m: typeof s.m === "string" ? s.m : undefined,
   }),
@@ -45,6 +58,10 @@ function PortalRace() {
   const [best, setBest] = useState(0);
   const [progress, setProgress] = useState(0);
   const [time, setTime] = useState(TIME);
+  // [B3] Timestamp de inicio de la pregunta actual: el tiempo restante se
+  // calcula contra Date.now(), no encadenando timeouts que se congelan con
+  // la pestaña oculta.
+  const [qStart, setQStart] = useState(() => Date.now());
   const [picked, setPicked] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState>(null);
   const [mastered, setMastered] = useState<string[]>([]);
@@ -55,38 +72,55 @@ function PortalRace() {
 
   const q = QS[i];
 
+  // [B3] Reloj honesto: recalcula el restante contra qStart en un intervalo
+  // corto; si la pestaña estuvo oculta, el tiempo perdido se descuenta igual.
   useEffect(() => {
     if (!started) return;
     if (picked !== null) return;
-    if (time <= 0) { answer(-1); return; }
-    const t = setTimeout(() => setTime((s) => s - 1), 1000);
-    return () => clearTimeout(t);
-  }, [time, picked, started]);
+    const tick = () => {
+      const remaining = TIME - Math.floor((Date.now() - qStart) / 1000);
+      if (remaining <= 0) {
+        setTime(0);
+        answer(-1);
+      } else {
+        setTime(remaining);
+      }
+    };
+    tick();
+    const id = setInterval(tick, 250);
+    return () => clearInterval(id);
+    // `answer` se recrea por render, pero solo cambia junto a estas deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qStart, picked, started]);
 
   function answer(idx: number) {
     if (picked !== null) return;
     setPicked(idx);
     const ok = idx === q.answer;
+    // [A1] El setTimeout de abajo corre con un closure viejo: el resultado se
+    // calcula aquí en locales y viaja a next() por argumento.
+    const correctNew = ok ? correct + 1 : correct;
+    const bestNew = ok ? Math.max(best, streak + 1) : best;
+    const masteredNew = ok ? [...mastered, q.concept] : mastered;
+    const weakNew = ok ? weak : [...weak, q.concept];
     if (ok) {
-      const ns = streak + 1;
-      setStreak(ns);
-      setBest((b) => Math.max(b, ns));
-      setCorrect((c) => c + 1);
+      setStreak(streak + 1);
+      setBest(bestNew);
+      setCorrect(correctNew);
       setProgress((p) => Math.min(100, p + 100 / QS.length));
-      setMastered((m) => [...m, q.concept]);
+      setMastered(masteredNew);
       setFeedback({ kind: "hit", text: hitFeedback(q.concept, "Portal cruzado"), key: Date.now() });
     } else {
       setStreak(0);
       setProgress((p) => Math.max(0, p - 6));
-      setWeak((w) => [...w, q.concept]);
+      setWeak(weakNew);
       setFeedback({ kind: "miss", text: missFeedback(q.concept, "El Vacío se fortalece"), key: Date.now() });
     }
     // Evento del escenario 3D (solo presentación, la lógica no cambia):
     // última pregunta → victoria/derrota; el resto → hechizo o pulso del Vacío.
     const last = i + 1 >= QS.length;
-    const finalCorrect = correct + (ok ? 1 : 0);
     const kind: BattleEvent["kind"] = last
-      ? finalCorrect >= Math.ceil(QS.length / 2)
+      ? correctNew >= Math.ceil(QS.length / 2)
         ? "victory"
         : "defeat"
       : ok
@@ -94,18 +128,27 @@ function PortalRace() {
         : "miss";
     setStageEvent((e) => ({ kind, n: e.n + 1 }));
     sfx.battle(kind);
-    setTimeout(next, 900);
+    setTimeout(() => next({ last, correctNew, bestNew, masteredNew, weakNew }), 900);
   }
 
-  function next() {
-    if (i + 1 >= QS.length) {
-      finish({ game: content.title ?? "Carrera de Portales", correct, total: QS.length, bestStreak: best, mastered, weak, missionId: missionId ?? "m1" });
+  function next(o: { last: boolean; correctNew: number; bestNew: number; masteredNew: string[]; weakNew: string[] }) {
+    if (o.last) {
+      finish({
+        game: content.title ?? "Carrera de Portales",
+        correct: o.correctNew,
+        total: QS.length,
+        bestStreak: o.bestNew,
+        mastered: o.masteredNew,
+        weak: o.weakNew,
+        missionId: missionId ?? "m1",
+      });
       return;
     }
     setI((n) => n + 1);
     setPicked(null);
     setFeedback(null);
     setTime(TIME);
+    setQStart(Date.now());
   }
 
   if (!allowed) return <ChallengeLocked />;
@@ -121,7 +164,11 @@ function PortalRace() {
         stake="Cada fallo frena tu nave. El reloj no perdona."
         concept={content.concept}
         actionLabel="¡A correr!"
-        onStart={() => setStarted(true)}
+        onStart={() => {
+          // El reloj arranca al salir de la intro, no al montar la ruta.
+          setQStart(Date.now());
+          setStarted(true);
+        }}
       />
     );
   }

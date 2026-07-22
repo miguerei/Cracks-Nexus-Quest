@@ -20,6 +20,19 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/reto/cartas")({
+  head: () => {
+    const title = "Duelo de Cartas — Nexus Quest";
+    const desc =
+      "Elige la carta-respuesta correcta y vacía la vida del Duelista del Vacío antes de perder la tuya en Cracks Academy: Nexus Quest.";
+    return {
+      meta: [
+        { title },
+        { name: "description", content: desc },
+        { property: "og:title", content: title },
+        { property: "og:description", content: desc },
+      ],
+    };
+  },
   validateSearch: (s: Record<string, unknown>): { m?: string } => ({
     m: typeof s.m === "string" ? s.m : undefined,
   }),
@@ -63,38 +76,44 @@ function CardDuel() {
     if (picked !== null) return;
     setPicked(idx);
     const ok = idx === q.answer;
+    // [A1] El setTimeout de abajo corre con un closure viejo (rivalHp/correct
+    // stale): el resultado se calcula aquí en locales y viaja a next().
+    const rivalHpNew = ok ? Math.max(0, rivalHp - 2) : rivalHp;
+    const playerHpNew = ok ? playerHp : Math.max(0, playerHp - 1);
+    const correctNew = ok ? correct + 1 : correct;
+    const bestNew = ok ? Math.max(best, streak + 1) : best;
+    const masteredNew = ok ? [...mastered, q.concept] : mastered;
+    const weakNew = ok ? weak : [...weak, q.concept];
     if (ok) {
-      setRivalHp((h) => Math.max(0, h - 2));
+      setRivalHp(rivalHpNew);
       setRivalHit(true);
-      setCorrect((c) => c + 1);
-      const ns = streak + 1;
-      setStreak(ns);
-      setBest((b) => Math.max(b, ns));
-      setMastered((m) => [...m, q.concept]);
+      setCorrect(correctNew);
+      setStreak(streak + 1);
+      setBest(bestNew);
+      setMastered(masteredNew);
       setFeedback({ kind: "hit", text: hitFeedback(q.concept, "Escudo roto"), key: Date.now() });
       toast.success("¡Ataque certero! -2 al rival");
       setTimeout(() => setRivalHit(false), 400);
     } else {
-      setPlayerHp((h) => Math.max(0, h - 1));
+      setPlayerHp(playerHpNew);
       setPlayerHit(true);
       setStreak(0);
-      setWeak((w) => [...w, q.concept]);
+      setWeak(weakNew);
       setFeedback({ kind: "miss", text: missFeedback(q.concept, "Ataque bloqueado"), key: Date.now() });
       setTimeout(() => setPlayerHit(false), 400);
     }
     // Evento del escenario 3D (solo presentación, la lógica no cambia):
     // rival sin vida → victoria; sin corazones → derrota; última carta →
     // según mayoría de aciertos; el resto → hechizo o pulso del Vacío.
-    const rivalDown = ok && rivalHp - 2 <= 0;
-    const playerDown = !ok && playerHp - 1 <= 0;
+    const rivalDown = rivalHpNew <= 0;
+    const playerDown = playerHpNew <= 0;
     const last = i + 1 >= QS.length;
-    const finalCorrect = correct + (ok ? 1 : 0);
     const kind: BattleEvent["kind"] = rivalDown
       ? "victory"
       : playerDown
         ? "defeat"
         : last
-          ? finalCorrect >= Math.ceil(QS.length / 2)
+          ? correctNew >= Math.ceil(QS.length / 2)
             ? "victory"
             : "defeat"
           : ok
@@ -102,22 +121,19 @@ function CardDuel() {
             : "miss";
     setStageEvent((e) => ({ kind, n: e.n + 1 }));
     sfx.battle(kind);
-    setTimeout(next, 950);
+    setTimeout(() => next({ end: rivalDown || playerDown || last, correctNew, bestNew, masteredNew, weakNew }), 950);
   }
 
-  function next() {
-    const rivalDown = rivalHp - 2 <= 0;
-    const playerDown = playerHp - 1 <= 0;
-    const last = i + 1 >= QS.length;
-    if (last || rivalDown || playerDown) {
+  function next(o: { end: boolean; correctNew: number; bestNew: number; masteredNew: string[]; weakNew: string[] }) {
+    if (o.end) {
       finish({
         game: content.title ?? "Duelo de Cartas",
-        correct,
+        correct: o.correctNew,
         total: QS.length,
-        bestStreak: best,
+        bestStreak: o.bestNew,
         difficulty: 1.3,
-        mastered,
-        weak,
+        mastered: o.masteredNew,
+        weak: o.weakNew,
         missionId: missionId ?? "m3",
       });
       return;
