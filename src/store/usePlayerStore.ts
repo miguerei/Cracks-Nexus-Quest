@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import {
   ACHIEVEMENTS,
   leagueForPoints,
@@ -267,14 +267,21 @@ export function usePlayerDerived() {
  * Progression gates must wait for this before enforcing redirects, otherwise
  * a direct deep-link would be judged against the empty default state.
  */
+/**
+ * ¿Ha rehidratado ya el estado persistido?
+ *
+ * useSyncExternalStore con snapshot de servidor explícito (false). Leer
+ * `hasHydrated()` durante el render rompía el SSR: React abandonaba el
+ * Suspense del root (error #419) y las rutas que lo usaban —portada y hub—
+ * se servían casi vacías para renderizarse en cliente. Con el snapshot de
+ * servidor, servidor y cliente coinciden y el SSR se completa.
+ */
 export function usePlayerHydrated(): boolean {
-  const [hydrated, setHydrated] = useState<boolean>(() => usePlayerStore.persist.hasHydrated());
-  useEffect(() => {
-    setHydrated(usePlayerStore.persist.hasHydrated());
-    const unsub = usePlayerStore.persist.onFinishHydration(() => setHydrated(true));
-    return unsub;
-  }, []);
-  return hydrated;
+  return useSyncExternalStore(
+    (onChange) => usePlayerStore.persist.onFinishHydration(onChange),
+    () => usePlayerStore.persist.hasHydrated(),
+    () => false,
+  );
 }
 
 export const ACHIEVEMENT_LIST = ACHIEVEMENTS;
