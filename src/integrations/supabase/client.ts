@@ -27,6 +27,64 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
 }
 
 
+/** Error uniforme que devuelve el cliente inerte (nunca lanza). */
+const ERROR_INERTE = {
+  message: 'Supabase no configurado: el juego funciona en modo local.',
+  name: 'SupabaseNoConfigurado',
+};
+
+/**
+ * Cliente inerte: misma forma que el real para la superficie que usa la app,
+ * pero sin red y sin excepciones. Toda operación resuelve `{ data, error }`
+ * con `error` presente, que es exactamente lo que los llamadores ya manejan
+ * (playerSync ignora el error y sigue con el estado local).
+ */
+function createClienteInerte() {
+  const resultado = async () => ({ data: null, error: ERROR_INERTE });
+
+  // Cadena de consulta encadenable: .from().select().eq().maybeSingle()… y
+  // además "thenable", para que un `await` directo también resuelva.
+  const cadena: any = new Proxy(
+    {},
+    {
+      get(_t, prop) {
+        if (prop === 'then') {
+          // Await sobre la cadena → { data: null, error }.
+          return (resolve: (v: unknown) => unknown) => resolve({ data: null, error: ERROR_INERTE });
+        }
+        return () => cadena;
+      },
+    },
+  );
+
+  return {
+    auth: {
+      getSession: async () => ({ data: { session: null }, error: null }),
+      getUser: async () => ({ data: { user: null }, error: null }),
+      onAuthStateChange: () => ({
+        data: { subscription: { unsubscribe: () => {} } },
+      }),
+      signInWithOtp: resultado,
+      signInWithPassword: resultado,
+      signInWithOAuth: resultado,
+      signUp: resultado,
+      verifyOtp: resultado,
+      signOut: async () => ({ error: null }),
+    },
+    from: () => cadena,
+    storage: { from: () => ({ upload: resultado, remove: resultado, download: resultado }) },
+    functions: { invoke: resultado },
+    channel: () => ({ on: () => ({ subscribe: () => ({ unsubscribe: () => {} }) }), subscribe: () => ({ unsubscribe: () => {} }) }),
+    removeChannel: () => {},
+  } as unknown as ReturnType<typeof createClient<Database>>;
+}
+
+/** true solo si hay credenciales reales (la UI puede ocultar cuenta/ranking). */
+export const isSupabaseConfigured: boolean = Boolean(
+  (import.meta.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL) &&
+    (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY),
+);
+
 function createSupabaseClient() {
   // Use import.meta.env for client-side (Vite build-time replacement)
   // Fall back to process.env for SSR (server-side rendering)
@@ -34,13 +92,15 @@ function createSupabaseClient() {
   const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
 
   if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
-    const missing = [
-      ...(!SUPABASE_URL ? ['SUPABASE_URL'] : []),
-      ...(!SUPABASE_PUBLISHABLE_KEY ? ['SUPABASE_PUBLISHABLE_KEY'] : []),
-    ];
-    const message = `Missing Supabase environment variable(s): ${missing.join(', ')}. Connect Supabase in Lovable Cloud.`;
-    console.error(`[Supabase] ${message}`);
-    throw new Error(message);
+    // Sin backend configurado el juego DEBE seguir siendo jugable: todo el
+    // núcleo (mundos 3D, temario del alumno, retos, progreso) vive en el
+    // dispositivo. Devolvemos un cliente inerte en vez de lanzar, para que un
+    // despliegue público sin Supabase no muera en el arranque (bootstrapAuth).
+    console.warn(
+      '[Supabase] Sin configurar (faltan SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY). ' +
+        'Modo local: el juego funciona, pero sin cuenta, ranking en la nube ni copia de seguridad.',
+    );
+    return createClienteInerte();
   }
 
   return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
