@@ -56,7 +56,9 @@ function CreateAvatar() {
       companion: nova.id,
     });
     toast.success(`¡Bienvenido a Nexus, ${finalName}!`, { description: `${nova.name} se ha unido a tu equipo.` });
-    navigate({ to: "/hub" });
+    // El temario va ANTES de jugar: así los retos preguntan sobre lo que el
+    // Aspirante estudia de verdad, no sobre el contenido de ejemplo.
+    navigate({ to: "/biblioteca" });
   }
 
   return (

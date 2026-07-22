@@ -24,6 +24,7 @@ const TILES = [
 function Hub() {
   const hydrated = usePlayerHydrated();
   const { hasProfile, avatar, documentName } = usePlayerStore();
+  const customContent = usePlayerStore((s) => s.customContent);
 
   // Wait for persisted state so a returning Aspirante isn't bounced to
   // avatar creation before their profile rehydrates from localStorage.
@@ -91,6 +92,43 @@ function Hub() {
         </span>
         <h1 className="mt-2 mb-1 text-3xl font-black">Hub Cracks Academy</h1>
         <p className="mb-6 text-muted-foreground">Elige a dónde quieres ir, Aspirante.</p>
+
+        {/* Temario activo: el juego pregunta sobre TU contenido. Si aún no hay
+            documento, esto es la llamada principal antes de entrar a jugar. */}
+        {customContent ? (
+          <div className="mb-6 flex flex-col gap-3 rounded-3xl border border-energy/40 bg-energy/5 p-4 backdrop-blur sm:flex-row sm:items-center">
+            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-energy text-energy-foreground">
+              <BookOpen className="h-6 w-6" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-energy">Temario activo</p>
+              <p className="truncate font-bold">{customContent.docName}</p>
+              <p className="text-xs text-muted-foreground">
+                {customContent.stats.conceptos} conceptos · {customContent.stats.preguntas} preguntas · los retos de todos los mundos usan este contenido.
+              </p>
+            </div>
+            <Link to="/biblioteca" className="shrink-0">
+              <GameButton variant="ghost" size="sm">Cambiar temario</GameButton>
+            </Link>
+          </div>
+        ) : (
+          <div className="mb-6 flex flex-col gap-3 rounded-3xl border-2 border-primary/50 bg-primary/5 p-5 backdrop-blur glow-primary sm:flex-row sm:items-center">
+            <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-gradient-energy text-energy-foreground">
+              <BookOpen className="h-7 w-7" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-accent">Antes de jugar</p>
+              <p className="text-lg font-black leading-tight">Sube tu temario y el juego preguntará sobre él</p>
+              <p className="text-sm text-muted-foreground">
+                PDF, Word, texto… Nova lo analiza en tu dispositivo y convierte tus apuntes en los retos de los 7 mundos.
+                Sin subirlo, jugarás con el contenido de ejemplo.
+              </p>
+            </div>
+            <Link to="/biblioteca" className="shrink-0">
+              <GameButton variant="primary">Subir mi temario</GameButton>
+            </Link>
+          </div>
+        )}
 
         <div className="grid gap-4 sm:grid-cols-2">
           {TILES.map((t, i) => (
