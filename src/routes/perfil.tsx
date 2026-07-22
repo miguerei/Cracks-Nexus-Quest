@@ -138,7 +138,12 @@ function Profile() {
           </GameButton>
           <GameButton
             variant="ghost"
-            onClick={() => { s.resetAll(); }}
+            onClick={() => {
+              // QA M2: borra TODO el progreso y el temario; exige confirmación.
+              if (window.confirm("¿Reiniciar la demo? Se borrará TODO tu progreso, tus divisas y el temario subido. Esta acción no se puede deshacer.")) {
+                s.resetAll();
+              }
+            }}
           >
             <RotateCcw className="h-4 w-4" /> Reiniciar demo
           </GameButton>

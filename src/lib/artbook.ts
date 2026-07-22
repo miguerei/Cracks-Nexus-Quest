@@ -1,7 +1,6 @@
 // Fase 1.2-A — Referencias centralizadas al Art Bible ya optimizado a .webp.
 // Se usan las versiones ligeras (~250-300 KB) para no dañar el rendimiento en
 // móvil. Los .png originales quedan como archivo de referencia de alta calidad.
-import introVideo from "@/assets/intro-nexus-quest.mp4.asset.json";
 
 export const ARTBOOK = {
   keyArt: "/artbook/01-key-art-cover-nexus-quest.webp",
@@ -33,8 +32,10 @@ export function heroPortrait(classId: string | undefined): string {
   return HERO_PORTRAITS[classId ?? "explorador"] ?? HERO_PORTRAITS.explorador;
 }
 
-// Vídeo de intro cinemática (CDN). Se reproduce al comenzar la aventura.
-export const INTRO_VIDEO: string = introVideo.url;
+// Vídeo de intro cinemática, servido desde public/ del propio deploy.
+// (QA A5: la URL del asset de Lovable era una ruta interna de su plataforma
+// que en Vercel devolvía 404 y saltaba la cinemática en silencio.)
+export const INTRO_VIDEO: string = "/intro.mp4";
 
 // Rarezas de recompensa del Style Guide, mapeadas a tokens semánticos.
 export type Rarity = "blue" | "violet" | "gold";

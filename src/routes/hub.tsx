@@ -7,6 +7,7 @@ import { GameButton } from "@/components/game/GameButton";
 import { NovaBubble } from "@/components/hud/NovaBubble";
 import { SystemScreen } from "@/components/game/SystemScreen";
 import { usePlayerStore, usePlayerHydrated } from "@/store/usePlayerStore";
+import { getCurrentWorldId } from "@/services/gameService";
 import { ARTBOOK } from "@/lib/artbook";
 
 export const Route = createFileRoute("/hub")({
@@ -15,7 +16,7 @@ export const Route = createFileRoute("/hub")({
 
 const TILES = [
   { to: "/biblioteca", title: "Biblioteca Nexus", desc: "Sube tus apuntes y crea aventuras", icon: BookOpen, grad: "bg-gradient-energy", glow: "hover:glow-energy" },
-  { to: "/mundo/bosque", title: "Misiones", desc: "Retos activos del Bosque", icon: Compass, grad: "bg-gradient-nexus", glow: "hover:glow-primary" },
+  { to: "/mundo/bosque", title: "Misiones", desc: "Tu misión activa", icon: Compass, grad: "bg-gradient-nexus", glow: "hover:glow-primary" },
   { to: "/mapa", title: "Mapa de Mundos", desc: "Explora y desbloquea zonas", icon: Map, grad: "bg-gradient-nexus", glow: "hover:glow-primary" },
   { to: "/ranking", title: "Ranking Semanal", desc: "Compite con tu clase", icon: Trophy, grad: "bg-gradient-gold", glow: "hover:glow-gold" },
   { to: "/perfil", title: "Tu Perfil", desc: "Progreso, logros y cristales", icon: User, grad: "bg-gradient-void", glow: "hover:glow-violet" },
@@ -25,6 +26,10 @@ function Hub() {
   const hydrated = usePlayerHydrated();
   const { hasProfile, avatar, documentName } = usePlayerStore();
   const customContent = usePlayerStore((s) => s.customContent);
+  const missionsCleared = usePlayerStore((s) => s.missionsCleared);
+  const worldsCleared = usePlayerStore((s) => s.worldsCleared);
+  // CTA dinamico (QA M3): antes apuntaba siempre al Bosque.
+  const mundoActual = getCurrentWorldId({ worldsCleared, missionsCleared });
 
   // Wait for persisted state so a returning Aspirante isn't bounced to
   // avatar creation before their profile rehydrates from localStorage.
@@ -139,7 +144,8 @@ function Hub() {
               transition={{ delay: i * 0.06 }}
             >
               <Link
-                to={t.to}
+                to={t.to === "/mundo/bosque" ? "/mundo/$worldId" : t.to}
+                params={t.to === "/mundo/bosque" ? { worldId: mundoActual } : undefined}
                 className={`group relative flex items-center gap-4 overflow-hidden rounded-3xl border border-border bg-card/60 p-5 backdrop-blur bevel-highlight transition hover:-translate-y-1 hover:border-primary/60 ${t.glow}`}
               >
                 <span
@@ -159,7 +165,7 @@ function Hub() {
         </div>
 
         <GameButton asChild variant="primary" size="lg" className="mt-4 w-full">
-          <Link to="/mundo/bosque">
+          <Link to="/mundo/$worldId" params={{ worldId: mundoActual }}>
             <Swords className="h-5 w-5" /> Ir directo a tu misión activa
           </Link>
         </GameButton>

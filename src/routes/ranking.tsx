@@ -10,6 +10,7 @@ import { GameButton } from "@/components/game/GameButton";
 import { CrystalIcon } from "@/components/game/CrystalIcon";
 import {
   fetchLeaderboard,
+  getLeaderboard,
   getLeagues,
   leagueForPoints,
   levelForXp,
@@ -17,6 +18,7 @@ import {
   getClassById,
   type LeaderboardEntry,
   type LeagueId,
+  getCurrentWorldId,
 } from "@/services/gameService";
 import { usePlayerStore, usePlayerDerived } from "@/store/usePlayerStore";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -31,6 +33,9 @@ const LEAGUE_ORDER: LeagueId[] = ["bronce", "plata", "oro", "diamante", "leyenda
 
 function Ranking() {
   const { avatar, points, streak, attempts } = usePlayerStore();
+  const missionsCleared = usePlayerStore((s) => s.missionsCleared);
+  const worldsCleared = usePlayerStore((s) => s.worldsCleared);
+  const mundoActual = getCurrentWorldId({ worldsCleared, missionsCleared });
   const { level } = usePlayerDerived();
   const myUserId = useAuthStore((s) => s.user?.id ?? null);
   const [filter, setFilter] = useState<string>("all");
@@ -82,8 +87,11 @@ function Ranking() {
       };
     });
 
-  // Full board with the real player merged in.
-  const all = [...remoteRows, player].sort((a, b) => b.points - a.points);
+  // Tablero completo con el jugador real. En modo local (sin nube) la lista
+  // remota viene vacía: usamos la clase de ejemplo para que la competición
+  // siga teniendo sentido (QA B4) — el jugador es la única fila real.
+  const baseRows = remoteRows.length > 0 ? remoteRows : getLeaderboard().filter((r) => !r.isPlayer);
+  const all = [...baseRows, player].sort((a, b) => b.points - a.points);
   const rows = filter === "all" ? all : all.filter((r) => r.classId === filter || r.isPlayer);
 
 
@@ -238,7 +246,7 @@ function Ranking() {
                 {playerLeadsClass && <span className="text-[10px] font-bold text-energy">· ¡la tuya!</span>}
               </span>
               <GameButton asChild size="sm" variant="primary">
-                <Link to="/mundo/bosque">
+                <Link to="/mundo/$worldId" params={{ worldId: mundoActual }}>
                   <ArrowUp className="h-4 w-4" /> Jugar otra partida
                 </Link>
               </GameButton>

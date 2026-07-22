@@ -102,11 +102,19 @@ function novaFor(node: FullNode | null, missions: MissionWithStatus[], worldName
   return { message: "¡Buen avance! Completa el reto disponible para desbloquear el siguiente.", mood: "happy" };
 }
 
-// Error boundary: si WebGL falla, degradamos a la escena 2D original.
-class SceneBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
+// Error boundary: si WebGL falla, avisa al padre para degradar a la escena 2D
+// COMO PÁGINA COMPLETA (dentro del contenedor fixed quedaba recortada, sin
+// scroll y con el HUD 3D fantasma encima — hallazgo A2 del QA).
+class SceneBoundary extends Component<
+  { fallback: ReactNode; children: ReactNode; onFail?: () => void },
+  { failed: boolean }
+> {
   state = { failed: false };
   static getDerivedStateFromError() {
     return { failed: true };
+  }
+  componentDidCatch() {
+    this.props.onFail?.();
   }
   render() {
     return this.state.failed ? this.props.fallback : this.props.children;
@@ -170,6 +178,9 @@ export function World3DScreen({ worldId }: { worldId: string }) {
   );
 
   const controlsRef = useRef<World3DControls>({ move: { x: 0, y: 0 }, jump: false, cast: false });
+  // WebGL caído → la escena 2D se renderiza como página completa (no dentro
+  // del contenedor fixed) y sin el HUD 3D encima.
+  const [webglFailed, setWebglFailed] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dialogue, setDialogue] = useState<ActiveDialogue | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -386,6 +397,12 @@ export function World3DScreen({ worldId }: { worldId: string }) {
     );
   }
 
+  // WebGL no disponible: el explorador 2D es una página normal con scroll
+  // (mapa 2D + lista de misiones), sin el HUD 3D superpuesto.
+  if (webglFailed) {
+    return <PlayableWorldScreen worldId={worldId} />;
+  }
+
   const nova = novaFor(activeNode, missions, world.name);
   const actionLabel = !activeNode ? "Acércate" : activeNode.actionLabel ?? (activeNode.status === "locked" ? "Bloqueado" : "Entrar");
 
@@ -396,7 +413,7 @@ export function World3DScreen({ worldId }: { worldId: string }) {
       <main className="fixed inset-0 z-0">
         <div className="relative h-full w-full overflow-hidden bg-background">
             <ClientOnly fallback={<CanvasLoading />}>
-              <SceneBoundary fallback={<div className="absolute inset-0"><PlayableWorldScreen worldId={worldId} /></div>}>
+              <SceneBoundary onFail={() => setWebglFailed(true)} fallback={null}>
                 <Suspense fallback={<CanvasLoading />}>
                   <World3DScene
                     worldId={worldId}
@@ -440,7 +457,7 @@ export function World3DScreen({ worldId }: { worldId: string }) {
 
             {/* Nova: compañera de viaje, como bocadillo de juego (no de web) */}
             {!dialogue && !menuOpen && !showTip && (
-              <div className="pointer-events-none absolute bottom-20 left-1/2 z-20 w-full max-w-md -translate-x-1/2 px-4 sm:bottom-6 sm:left-auto sm:right-20 sm:translate-x-0">
+              <div className="pointer-events-none absolute bottom-40 left-1/2 z-20 w-full max-w-sm -translate-x-1/2 px-4 sm:bottom-6 sm:left-auto sm:right-20 sm:max-w-md sm:translate-x-0">
                 <div className="rounded-2xl border border-primary/30 bg-background/70 px-3 py-2 backdrop-blur">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-accent">Nova</p>
                   <p className="text-xs leading-snug text-foreground/90">{nova.message}</p>
@@ -582,7 +599,7 @@ export function World3DScreen({ worldId }: { worldId: string }) {
               <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
                 <div className="m-3 w-full max-w-sm rounded-2xl border-2 border-primary/50 bg-card p-5 text-center shadow-deep">
                   <p className="text-[11px] font-bold uppercase tracking-widest text-accent">Controles del Aspirante</p>
-                  <h3 className="mt-1 text-lg font-black">Bienvenido al Bosque 3D</h3>
+                  <h3 className="mt-1 text-lg font-black">Bienvenido a {world.name}</h3>
                   <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
                     <div className="rounded-xl border border-border/60 bg-background/50 p-2"><b className="text-primary">WASD</b> / flechas <div className="text-muted-foreground">moverse</div></div>
                     <div className="rounded-xl border border-border/60 bg-background/50 p-2"><b className="text-accent">Espacio</b><div className="text-muted-foreground">saltar</div></div>

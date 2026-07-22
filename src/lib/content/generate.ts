@@ -176,6 +176,22 @@ export function detectarConceptos(texto: string): Concept[] {
 
 // ---- 3) Generación de preguntas ----
 
+/**
+ * Opciones de MCQ sin duplicados (QA B2): si dos conceptos comparten texto,
+ * el duplicado se descarta — con menos de 2 opciones la pregunta no vale,
+ * así que garantizamos la respuesta + al menos un distractor distinto.
+ */
+function dedupeOpciones(respuesta: string, ...distractores: string[]): string[] {
+  const vistos = new Set([respuesta.trim().toLowerCase()]);
+  const limpios = distractores.filter((d) => {
+    const k = d.trim().toLowerCase();
+    if (vistos.has(k)) return false;
+    vistos.add(k);
+    return true;
+  });
+  return [respuesta, ...limpios];
+}
+
 function sinPuntoFinal(s: string): string {
   return s.replace(/[.…]$/, "");
 }
@@ -212,7 +228,7 @@ export function generarPreguntas(
     const h2 = conceptos[(i + 2) % n];
 
     // (a) MCQ definición: distractores = definiciones de términos hermanos.
-    const opcionesDef = mezclar([c.definition, h1.definition, h2.definition], rng);
+    const opcionesDef = mezclar(dedupeOpciones(c.definition, h1.definition, h2.definition), rng);
     agregar({
       prompt: `¿Qué es «${c.term}»?`,
       options: opcionesDef,
@@ -221,7 +237,7 @@ export function generarPreguntas(
     });
 
     // (b) MCQ inverso: distractores = términos hermanos.
-    const opcionesTerm = mezclar([c.term, h1.term, h2.term], rng);
+    const opcionesTerm = mezclar(dedupeOpciones(c.term, h1.term, h2.term), rng);
     agregar({
       prompt: `¿A qué concepto corresponde esta definición? «${sinPuntoFinal(c.definition)}»`,
       options: opcionesTerm,
@@ -244,7 +260,9 @@ export function generarPreguntas(
   // la propia frase-definición, para no regalar la respuesta).
   conceptos.forEach((c, i) => {
     const inicioDef = sinPuntoFinal(c.definition).slice(0, 30).toLowerCase();
-    const patron = new RegExp(`\\b${escapeRegExp(c.term)}\\b`, "i");
+    // \\b es ASCII: falla con términos que empiezan/terminan en vocal acentuada
+    // («ósmosis», «colibrí»). Lookarounds Unicode con flag "u" (QA B1).
+    const patron = new RegExp(`(?<!\\p{L})${escapeRegExp(c.term)}(?!\\p{L})`, "iu");
     const frase = frases.find(
       (f) =>
         f.length <= 200 &&

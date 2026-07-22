@@ -235,6 +235,17 @@ export function worldOfChallenge(route: string, missionId?: string): string {
 }
 
 /** Worlds with their derived progression status for the map. */
+/**
+ * Mundo "actual" del jugador: el primero en curso; si todo está completado,
+ * el último jugable. Para CTAs de "siguiente reto" (QA M3: estaban
+ * hardcodeados al Bosque).
+ */
+export function getCurrentWorldId(player: PlayerProgress): string {
+  const worlds = getWorldsWithProgress(player).filter((w) => w.playable);
+  const current = worlds.find((w) => w.progressStatus === "current");
+  return current?.id ?? worlds[worlds.length - 1]?.id ?? "bosque";
+}
+
 export function getWorldsWithProgress(player: PlayerProgress): WorldWithProgress[] {
   const { missionsCleared } = player;
   return WORLDS.map((w) => {
@@ -403,7 +414,10 @@ export type RemoteScore = {
  * Returns [] on error so the UI can still render the local player.
  */
 export async function fetchLeaderboard(limit = 100): Promise<RemoteScore[]> {
-  const { supabase } = await import("@/integrations/supabase/client");
+  const { supabase, isSupabaseConfigured } = await import("@/integrations/supabase/client");
+  // Modo local sin backend (QA B4): no consultes ni loguees errores en cada
+  // refetch — el ranking muestra la clase de ejemplo + tu fila local.
+  if (!isSupabaseConfigured) return [];
   const { data, error } = await supabase
     .from("public_scores")
     .select("user_id, name, class_id, points, xp")

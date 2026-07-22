@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight, Sparkles } from "lucide-react";
@@ -10,7 +10,8 @@ import { ClassBadge } from "@/components/game/ClassBadge";
 import { NovaBubble } from "@/components/hud/NovaBubble";
 import { NovaAvatar } from "@/components/hud/NovaAvatar";
 import { getPlayerClasses, getAvatarOptions, getCompanions, getWorlds } from "@/services/gameService";
-import { usePlayerStore } from "@/store/usePlayerStore";
+import { usePlayerStore, usePlayerHydrated } from "@/store/usePlayerStore";
+import { SystemScreen } from "@/components/game/SystemScreen";
 import { ARTBOOK, heroPortrait } from "@/lib/artbook";
 
 import { cn } from "@/lib/utils";
@@ -34,6 +35,8 @@ export const Route = createFileRoute("/crear-avatar")({
 function CreateAvatar() {
   const navigate = useNavigate();
   const createProfile = usePlayerStore((s) => s.createProfile);
+  const hasProfile = usePlayerStore((s) => s.hasProfile);
+  const hydrated = usePlayerHydrated();
 
   const [name, setName] = useState("");
   const [classId, setClassId] = useState(PLAYER_CLASSES[0].id);
@@ -41,6 +44,34 @@ function CreateAvatar() {
 
   const cls = PLAYER_CLASSES.find((c) => c.id === classId)!;
   const nova = COMPANIONS[0];
+
+  // GUARD (QA A3): createProfile reinicia XP/divisas/puntos. Un Aspirante
+  // existente que vuelva aquí (URL directa, botón atrás) perdería todo su
+  // progreso al confirmar. Para rehacer el perfil existe "Reiniciar" en Perfil.
+  if (hydrated && hasProfile) {
+    return (
+      <SystemScreen
+        icon="🛡️"
+        tone="primary"
+        title="Ya tienes un Aspirante"
+        message="Tu héroe y su progreso están a salvo. Si quieres empezar de cero, hazlo desde tu Perfil."
+        novaMessage="¡Te estaba esperando! Volvamos a la aventura."
+      >
+        <Link
+          to="/hub"
+          className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-gradient-nexus px-6 py-3.5 font-bold text-primary-foreground glow-primary transition hover:scale-[1.02]"
+        >
+          Ir al Hub
+        </Link>
+        <Link
+          to="/perfil"
+          className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-border bg-card/60 px-6 py-3.5 font-bold text-muted-foreground transition hover:text-foreground"
+        >
+          Ver mi Perfil
+        </Link>
+      </SystemScreen>
+    );
+  }
 
   function confirm() {
     const finalName = name.trim() || "Aspirante";

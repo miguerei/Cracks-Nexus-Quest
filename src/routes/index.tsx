@@ -7,7 +7,7 @@ import { GameButton } from "@/components/game/GameButton";
 import { GameFrame } from "@/components/game/GameFrame";
 import { IntroVideo } from "@/components/game/IntroVideo";
 import { ARTBOOK } from "@/lib/artbook";
-import { usePlayerStore } from "@/store/usePlayerStore";
+import { usePlayerStore, usePlayerHydrated } from "@/store/usePlayerStore";
 
 // Imagen para compartir (WhatsApp/Twitter): absoluta sobre el dominio de
 // producción propio — la portada vive en public/og-cover.jpg.
@@ -30,17 +30,20 @@ export const Route = createFileRoute("/")({
           "El RPG educativo donde tus apuntes se convierten en misiones. Juega, desbloquea mundos y domina el ranking.",
       },
       { property: "og:type", content: "website" },
-      { property: "og:url", content: "/" },
+      { property: "og:url", content: "https://cracks-game-eta.vercel.app/" },
       { property: "og:image", content: OG_IMAGE },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:image", content: OG_IMAGE },
     ],
-    links: [{ rel: "canonical", href: "/" }],
+    links: [{ rel: "canonical", href: "https://cracks-game-eta.vercel.app/" }],
   }),
 });
 
 function Landing() {
-  const hasProfile = usePlayerStore((s) => s.hasProfile);
+  // Gate de hidratación (QA B9): sin él, un jugador con perfil ve durante un
+  // instante el CTA de "Entrar" antes de cambiar a "Continuar aventura".
+  const hydrated = usePlayerHydrated();
+  const hasProfile = usePlayerStore((s) => s.hasProfile) && hydrated;
   const navigate = useNavigate();
   const [showIntro, setShowIntro] = useState(false);
 

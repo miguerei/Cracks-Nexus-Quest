@@ -18,6 +18,7 @@ import { SystemScreen } from "@/components/game/SystemScreen";
 import { GameButton } from "@/components/game/GameButton";
 import { GameFrame } from "@/components/game/GameFrame";
 import { RewardCard } from "@/components/game/RewardCard";
+import { getCurrentWorldId } from "@/services/gameService";
 import { usePlayerStore, usePlayerHydrated } from "@/store/usePlayerStore";
 
 export const Route = createFileRoute("/recompensa")({
@@ -75,6 +76,9 @@ function Reward() {
 
 function RewardView() {
   const lastReward = usePlayerStore((s) => s.lastReward)!;
+  const missionsCleared = usePlayerStore((s) => s.missionsCleared);
+  const worldsCleared = usePlayerStore((s) => s.worldsCleared);
+  const mundoActual = getCurrentWorldId({ worldsCleared, missionsCleared });
   const {
     xp,
     crystals,
@@ -231,7 +235,7 @@ function RewardView() {
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
           <GameButton asChild variant="primary" size="lg" className="flex-1">
-            <Link to="/mundo/bosque">Siguiente reto</Link>
+            <Link to="/mundo/$worldId" params={{ worldId: mundoActual }}>Siguiente reto</Link>
           </GameButton>
           <GameButton asChild variant="ghost" size="lg" className="flex-1">
             <Link to="/ranking">
@@ -271,8 +275,8 @@ function NoReward() {
       novaMessage="¡Elige una misión y demuestra lo que sabes para llenar tu cofre!"
     >
       <GameButton asChild variant="primary" size="lg" className="flex-1">
-        <Link to="/mundo/bosque">
-          <Compass className="h-4 w-4" /> Ir al Bosque
+        <Link to="/mapa">
+          <Compass className="h-4 w-4" /> Ir al mapa de mundos
         </Link>
       </GameButton>
       <GameButton asChild variant="ghost" size="lg" className="flex-1">

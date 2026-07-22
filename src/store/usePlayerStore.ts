@@ -174,9 +174,10 @@ export const usePlayerStore = create<PlayerState>()(
       createProfile: (avatar) =>
         set({ hasProfile: true, avatar, xp: 50, crystals: 10, coins: 25, nexos: 1, points: 120 }),
       setDocument: (name) => set({ documentName: name }),
-      setCustomContent: (c) => set({ customContent: c, documentName: c.docName }),
+      // Cambiar de temario resetea débiles/dominados (QA B6): eran del documento anterior.
+      setCustomContent: (c) => set({ customContent: c, documentName: c.docName, weakConcepts: [], masteredConcepts: [] }),
       // Volver al contenido de ejemplo: limpia el temario del alumno.
-      clearCustomContent: () => set({ customContent: null, documentName: null }),
+      clearCustomContent: () => set({ customContent: null, documentName: null, weakConcepts: [], masteredConcepts: [] }),
       addReward: (r) =>
         set((s) => ({
           xp: s.xp + (r.xp ?? 0),
