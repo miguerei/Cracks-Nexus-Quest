@@ -1595,6 +1595,16 @@ export default function World3DScene({
   const look = useMemo(() => getHeroLook(classId), [classId]);
   const spawn = layout.spawn;
   const posRef = useRef(new THREE.Vector3(spawn[0], REST_Y, spawn[1]));
+
+  // Con la pestaña oculta la física se pausa (ver <Physics paused>): evita
+  // pasos gigantes de simulación cuando el navegador congela el rAF.
+  const [tabOculta, setTabOculta] = useState(false);
+  useEffect(() => {
+    const onVis = () => setTabOculta(document.hidden);
+    onVis();
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
   const hitsRef = useRef<Map<string, number>>(new Map());
   const [activeId, setActiveId] = useState<string | null>(null);
   const [bolts, setBolts] = useState<Bolt[]>([]);
@@ -1671,7 +1681,12 @@ export default function World3DScene({
       )}
 
       <Suspense fallback={null}>
-        <Physics gravity={[0, -18, 0]}>
+        {/* timeStep="vary": simulación en tiempo real independiente del
+            refresco (a 1/60 fijo por frame, un monitor de 120 Hz duplicaba la
+            velocidad del héroe). Con pestaña oculta pausamos la física: el
+            driver de visibilidad mantiene el render, pero un delta de ~1 s
+            haría atravesar barreras (tunneling). */}
+        <Physics gravity={[0, -18, 0]} timeStep="vary" paused={tabOculta}>
           <Terrain theme={theme} layout={layout} hasEnv={Env != null} />
           {Env != null && <Env />}
           {nodes.map((n) => (

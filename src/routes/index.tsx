@@ -9,8 +9,9 @@ import { IntroVideo } from "@/components/game/IntroVideo";
 import { ARTBOOK } from "@/lib/artbook";
 import { usePlayerStore } from "@/store/usePlayerStore";
 
-const OG_IMAGE =
-  "https://project--8f288939-e1fd-4849-939e-e3e64f1020a9.lovable.app/og-cover.jpg";
+// Imagen para compartir (WhatsApp/Twitter): absoluta sobre el dominio de
+// producción propio — la portada vive en public/og-cover.jpg.
+const OG_IMAGE = "https://cracks-game-eta.vercel.app/og-cover.jpg";
 
 export const Route = createFileRoute("/")({
   component: Landing,
