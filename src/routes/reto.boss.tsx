@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Crown, Heart, Shield, Swords, Sparkles, Skull } from "lucide-react";
 import { StarField } from "@/components/game/StarField";
@@ -14,6 +14,8 @@ import { hitFeedback, missFeedback } from "@/lib/challengeFeedback";
 import { BattleStageBackdrop, SfxToggle, type BattleEvent } from "@/components/game/world3d/battle3d";
 import { usePlayerStore } from "@/store/usePlayerStore";
 import { sfx } from "@/lib/sfx";
+import { music } from "@/lib/music";
+import { MusicToggle } from "@/components/game/world3d/MusicToggle";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -34,6 +36,11 @@ const PHASE_META = [
 function BossBattle() {
   const { m: missionId } = Route.useSearch();
   const content = useMemo(() => getMissionContent(missionId), [missionId]);
+  // Música del jefe: capa rítmica pesada sobre el tema del mundo (music.ts).
+  useEffect(() => {
+    music.enterBattle("boss", content.worldId);
+    return () => music.stop(900);
+  }, [content.worldId]);
   const QS = useMemo(() => content.questions, [content]);
   const BOSS_MAX = QS.length;
   const finish = useFinishChallenge();
@@ -143,6 +150,7 @@ function BossBattle() {
       <StarField density={90} />
       {/* Fondo 3D del jefe: el Coloso del Vacío entre ruinas, retícula al núcleo */}
       <BattleStageBackdrop variant="boss" classId={avatar.classId} heroColor={avatar.color} event={stageEvent} />
+      <MusicToggle className="fixed bottom-4 right-16 z-40 grid h-10 w-10 place-items-center rounded-full border border-border bg-card/70 text-sm backdrop-blur transition hover:border-primary/60" />
       <SfxToggle />
       <div className="mx-auto flex min-h-screen max-w-2xl flex-col px-4 py-5">
         {/* Boss epic header */}

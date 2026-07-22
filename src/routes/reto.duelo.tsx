@@ -14,6 +14,8 @@ import { hitFeedback, missFeedback } from "@/lib/challengeFeedback";
 import { BattleStageBackdrop, SfxToggle, type BattleEvent } from "@/components/game/world3d/battle3d";
 import { usePlayerStore } from "@/store/usePlayerStore";
 import { sfx } from "@/lib/sfx";
+import { music } from "@/lib/music";
+import { MusicToggle } from "@/components/game/world3d/MusicToggle";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/reto/duelo")({
@@ -28,6 +30,11 @@ const TIME = 10;
 function PortalRace() {
   const { m: missionId } = Route.useSearch();
   const content = useMemo(() => getMissionContent(missionId), [missionId]);
+  // Música de combate: capa rítmica suave sobre el tema del mundo (music.ts).
+  useEffect(() => {
+    music.enterBattle("duelo", content.worldId);
+    return () => music.stop(900);
+  }, [content.worldId]);
   const QS = useMemo(() => content.questions.slice(0, 5), [content]);
   const finish = useFinishChallenge();
   const allowed = useChallengeGuard("/reto/duelo", missionId);
@@ -126,6 +133,7 @@ function PortalRace() {
       <StarField density={70} />
       {/* Fondo 3D del duelo: héroe de espaldas frente al rival entre ruinas */}
       <BattleStageBackdrop variant="rival" classId={avatar.classId} heroColor={avatar.color} event={stageEvent} />
+      <MusicToggle className="fixed bottom-4 right-16 z-40 grid h-10 w-10 place-items-center rounded-full border border-border bg-card/70 text-sm backdrop-blur transition hover:border-primary/60" />
       <SfxToggle />
       <div className="mx-auto flex min-h-screen max-w-2xl flex-col px-4 py-6">
         {/* HUD */}

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Swords, Heart, Skull, Flame, Shield, Waves } from "lucide-react";
 import { StarField } from "@/components/game/StarField";
@@ -14,6 +14,8 @@ import { hitFeedback, missFeedback } from "@/lib/challengeFeedback";
 import { BattleStageBackdrop, SfxToggle, type BattleEvent } from "@/components/game/world3d/battle3d";
 import { usePlayerStore } from "@/store/usePlayerStore";
 import { sfx } from "@/lib/sfx";
+import { music } from "@/lib/music";
+import { MusicToggle } from "@/components/game/world3d/MusicToggle";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -29,6 +31,11 @@ const MAX_HP = 3;
 function WaveArena() {
   const { m: missionId } = Route.useSearch();
   const content = useMemo(() => getMissionContent(missionId), [missionId]);
+  // Música de combate: capa rítmica suave sobre el tema del mundo (music.ts).
+  useEffect(() => {
+    music.enterBattle("duelo", content.worldId);
+    return () => music.stop(900);
+  }, [content.worldId]);
   // Each wave = one enemy carrying a concept-question.
   const WAVES = useMemo(() => content.questions.slice(0, 6), [content]);
   const finish = useFinishChallenge();
@@ -138,6 +145,7 @@ function WaveArena() {
       <StarField density={80} />
       {/* Fondo 3D de la arena: la horda de Sombras del Vacío entre ruinas */}
       <BattleStageBackdrop variant="horda" classId={avatar.classId} heroColor={avatar.color} event={stageEvent} />
+      <MusicToggle className="fixed bottom-4 right-16 z-40 grid h-10 w-10 place-items-center rounded-full border border-border bg-card/70 text-sm backdrop-blur transition hover:border-primary/60" />
       <SfxToggle />
       <div className="mx-auto flex min-h-screen max-w-2xl flex-col px-4 py-6">
         <div className="mb-3 flex items-center justify-between gap-2">

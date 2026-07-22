@@ -24,6 +24,8 @@ import { ARTBOOK } from "@/lib/artbook";
 import { usePlayerStore } from "@/store/usePlayerStore";
 import { getWorldLayout } from "./worldConfig";
 import { QualityToggle } from "./render/QualityToggle";
+import { MusicToggle } from "./MusicToggle";
+import { music } from "@/lib/music";
 import type { Scene3DNode, World3DControls } from "./World3DScene";
 import type { DialogueChoiceOption } from "@/components/game/dialogue/types";
 
@@ -178,6 +180,16 @@ export function World3DScreen({ worldId }: { worldId: string }) {
     const id = setTimeout(() => setShowTitle(false), 3200);
     return () => clearTimeout(id);
   }, [worldId]);
+
+  // Música ambiental procedural del bioma (music.ts): crossfade al entrar y
+  // fundido limpio al desmontar. Solo mundos reales y desbloqueados; el motor
+  // respeta el toggle persistido (default OFF) y nunca suena sin gesto previo.
+  const worldUnlocked = !!world && progress?.progressStatus !== "locked";
+  useEffect(() => {
+    if (!worldUnlocked) return;
+    music.enterWorld(worldId);
+    return () => music.stop(1200);
+  }, [worldId, worldUnlocked]);
   const handleActive = useCallback((id: string | null) => setActiveId(id), []);
 
   // Tooltip de bienvenida (una vez por navegador).
@@ -439,6 +451,7 @@ export function World3DScreen({ worldId }: { worldId: string }) {
             {/* Menú + calidad gráfica (esquina superior derecha) */}
             {!dialogue && !menuOpen && !showTip && (
               <div className="absolute right-3 top-3 z-30 flex items-center gap-2">
+                <MusicToggle className="rounded-full border border-primary/40 bg-background/60 px-3 py-1.5 text-xs font-semibold text-primary backdrop-blur transition hover:border-primary/70" />
                 <QualityToggle className="rounded-full border border-primary/40 bg-background/60 px-3 py-1.5 text-xs font-semibold text-primary backdrop-blur transition hover:border-primary/70" />
                 <button
                   type="button"

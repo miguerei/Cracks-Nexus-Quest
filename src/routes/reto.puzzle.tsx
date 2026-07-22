@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Puzzle, Flame, XCircle, Link2 } from "lucide-react";
 import { StarField } from "@/components/game/StarField";
@@ -15,6 +15,8 @@ import { hitFeedback, missFeedback } from "@/lib/challengeFeedback";
 import { BattleStageBackdrop, SfxToggle, type BattleEvent } from "@/components/game/world3d/battle3d";
 import { usePlayerStore } from "@/store/usePlayerStore";
 import { sfx } from "@/lib/sfx";
+import { music } from "@/lib/music";
+import { MusicToggle } from "@/components/game/world3d/MusicToggle";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -32,6 +34,11 @@ function shuffle<T>(arr: T[]): T[] {
 function CrystalPuzzle() {
   const { m: missionId } = Route.useSearch();
   const content = useMemo(() => getMissionContent(missionId), [missionId]);
+  // Música de combate: capa rítmica suave sobre el tema del mundo (music.ts).
+  useEffect(() => {
+    music.enterBattle("duelo", content.worldId);
+    return () => music.stop(900);
+  }, [content.worldId]);
   const PUZZLE_PAIRS = content.pairs;
   const finish = useFinishChallenge();
   const allowed = useChallengeGuard("/reto/puzzle", missionId);
@@ -120,6 +127,7 @@ function CrystalPuzzle() {
       <StarField density={70} />
       {/* Fondo 3D: el Guardián Rúnico sellado; cada pareja lo restaura un poco */}
       <BattleStageBackdrop variant="runas" classId={avatar.classId} heroColor={avatar.color} event={stageEvent} />
+      <MusicToggle className="fixed bottom-4 right-16 z-40 grid h-10 w-10 place-items-center rounded-full border border-border bg-card/70 text-sm backdrop-blur transition hover:border-primary/60" />
       <SfxToggle />
       <div className="mx-auto max-w-3xl px-4 py-6">
         <div className="mb-2 flex items-center gap-2">
