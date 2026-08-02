@@ -96,3 +96,49 @@ altar del jefe con tinte del Vacío.
 - Los ficheros JSX de escenas 3D deben vivir bajo `src/components/game/world3d/`
   (el plugin de vite.config limpia `data-tsd-source` solo ahí; fuera, el Canvas
   revienta en dev).
+
+---
+
+## ANEXO — FASE 11: PARIDAD CON EL VÍDEO (dirección vigente)
+
+Fuentes canónicas re-extraídas: `docs/ref/canon-video-mundo.png` (fotograma 5s)
+y `docs/ref/canon-video-gameplay.png` (fotograma 9.5s). TODO se juzga contra
+estos dos fotogramas.
+
+### Lectura del fotograma MUNDO (5s) — se aplica a los 7 mundos
+1. **Ruinas vivas**: arcos y columnas de sillería clara CON MUSGO en las
+   juntas y VEGETACIÓN creciendo encima. Cada mundo traduce "ruina" a su
+   bioma (laboratorio → estructuras, fortaleza → murallas...), pero la regla
+   es la misma: ninguna superficie grande sin vida ni desgaste.
+2. **Cristales-guía**: gemas romboidales AZUL LUMINOSO incrustadas en lo alto
+   de arcos/columnas (emisivas, entran en bloom). Son la firma visual de la
+   saga: repetirlas en todos los mundos como landmark.
+3. **Suelo de plaza**: losas de piedra con hierba entre las juntas cerca de
+   los hitos; el sendero de tierra queda para las transiciones.
+4. **Densidad de fondo**: siempre hay 2-3 planos detrás del jugable (árboles
+   colosales / siluetas de ruinas / niebla azul aérea). El cielo es azul
+   saturado con nubes blancas definidas.
+5. Paleta día: verdes saturados + piedra cálida + azul cielo; sombras frías.
+
+### Lectura del fotograma GAMEPLAY (9.5s) — lenguaje de batalla
+1. **Composición "apuntando al gigante"**: cámara BAJA detrás del grupo; los
+   héroes DE ESPALDAS en primer término (siluetas nítidas, armas
+   desenfundadas), el coloso ENORME centrado al fondo. La escala se cuenta
+   con la diagonal héroe(bajo-cerca) → coloso(alto-lejos).
+2. **Noche del Vacío**: azul nocturno profundo + VIOLETA como único acento
+   (núcleo del coloso, motas flotantes, grietas). Cristales azules a los
+   flancos como "porterías" que enmarcan.
+3. **Motas de Vacío**: partículas violetas suspendidas por TODA la escena
+   (no solo junto al coloso) — es lo que más vende la lámina.
+4. **Respuesta = hechizo**: al acertar, el héroe CASTEA (Spellcast_Shoot ya
+   existe) con proyectil azul hacia el coloso; al fallar, pulso violeta del
+   coloso hacia el grupo. Las preguntas viven DENTRO de esta escena, no en
+   una tarjeta aparte.
+
+### Reglas de producción (lecciones Fase 10, NO repetir errores)
+- Cel-shading global ya activo (render/toon.ts): NO tocar render/**.
+- Materiales con alphaTest NUNCA se convierten a toon (causa histórica de
+  las manchas negras). Follaje nuevo: alphaTest > 0 y silueta lobulada.
+- Sombra proyectada: shadow-intensity 0.42 ya calibrada; no subir.
+- git commit SOLO de los ficheros propios (git add rutas explícitas) y
+  PUSH INMEDIATO tras cada commit (regla innegociable tras la pérdida).
