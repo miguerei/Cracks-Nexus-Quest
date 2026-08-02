@@ -40,6 +40,7 @@ import {
 import { Effect, ToneMappingMode, type DepthOfFieldEffect } from "postprocessing";
 import * as THREE from "three";
 
+import { ContornoAnime, contornoPorTier } from "./OutlinePass";
 import type { QualityTier } from "./quality";
 
 export type CinematicVariant = "world" | "battle";
@@ -172,6 +173,20 @@ export function CinematicEffects({
   }
 
   // 3-7) Bloom + gradación + curva ACES + viñeta (todos los tiers).
+  // 2b) CONTORNO ANIME (Fase 10): el trazo que recorta cada silueta.
+  {
+    const trazo = contornoPorTier(tier);
+    efectos.push(
+      <ContornoAnime
+        key="contorno"
+        grosor={trazo.grosor}
+        fuerza={trazo.fuerza}
+        cerca={batalla ? 22 : 34}
+        lejos={batalla ? 62 : 105}
+      />,
+    );
+  }
+
   efectos.push(
     <Bloom key="bloom" mipmapBlur intensity={batalla ? 0.62 : 0.55} luminanceThreshold={1} luminanceSmoothing={0.28} />,
     <GradacionNexus key="grade" fuerza={batalla ? 1 : 0.9} />,
