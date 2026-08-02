@@ -26,6 +26,7 @@ import {
 import * as THREE from "three";
 
 import { CinematicEffects } from "./render/CinematicEffects";
+import { ToonizarEscena } from "./render/toon";
 import { getTierDpr, useQualityTier } from "./render/quality";
 
 import {
@@ -1653,8 +1654,8 @@ export default function World3DScene({
 
       {/* Rig de iluminación paramétrico: la ambience del mundo manda.
           Cine Pass: menos ambient y más sol (modelado con contraste) + CONTRALUZ. */}
-      <ambientLight color={amb.ambientColor} intensity={amb.ambientIntensity * 0.78} />
-      <hemisphereLight color={amb.hemiSky} groundColor={amb.hemiGround} intensity={amb.hemiIntensity} />
+      <ambientLight color={amb.ambientColor} intensity={amb.ambientIntensity * 0.95} />
+      <hemisphereLight color={amb.hemiSky} groundColor={amb.hemiGround} intensity={amb.hemiIntensity * 1.15} />
       <directionalLight
         // key por tier: el mapa de sombras solo se reconstruye al cambiar de calidad.
         key={`sol-${tier}`}
@@ -1664,13 +1665,16 @@ export default function World3DScene({
         color={amb.sunColor}
         shadow-mapSize-width={tier === "alta" ? 2048 : 1024}
         shadow-mapSize-height={tier === "alta" ? 2048 : 1024}
-        shadow-radius={6}
+        shadow-radius={2}
         shadow-camera-left={-32}
         shadow-camera-right={32}
         shadow-camera-top={32}
         shadow-camera-bottom={-32}
         shadow-camera-far={110}
         shadow-bias={-0.0004}
+        // Fase 10: con cel-shading una sombra dura se convierte en mancha
+        // sólida. Atenuada, el relleno ambiental la tiñe de azul (canon).
+        shadow-intensity={0.42}
       />
       {/* CONTRALUZ de cine: rim frío desde el fondo del encuadre (la cámara
           siempre mira hacia -z), sin sombras — recorta TODAS las siluetas
@@ -1727,6 +1731,10 @@ export default function World3DScene({
         {/* Fase 7 — composer cinematográfico compartido: N8AO + DoF (autofocus
             al héroe vía posRef) + Bloom + gradación al póster + ACES + viñeta,
             recortado por tier. Sustituye al Bloom+Vignette clásico. */}
+        {/* Fase 10 — Anime Pass: convierte la escena a cel-shading (bandas
+            duras + sombra fría + rim). Debe ir DENTRO del Suspense para ver
+            el entorno y los personajes ya montados. */}
+        <ToonizarEscena clave={worldId} />
         <CinematicEffects tier={tier} focusRef={posRef} />
       </Suspense>
 
