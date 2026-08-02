@@ -52,7 +52,7 @@ import {
   type EquationPuzzle,
 } from "@/data/game";
 import { usePlayerStore, type CustomContent } from "@/store/usePlayerStore";
-import { preguntasParaMision } from "@/lib/content/generate";
+import { filtrarPreguntasValidas, preguntasParaMision, MUNDOS_REPARTO } from "@/lib/content/generate";
 
 // ---- Contenido personalizado (Fase 6) ----
 // El alumno puede subir SU temario en /biblioteca: el resultado del generador
@@ -66,9 +66,36 @@ import { preguntasParaMision } from "@/lib/content/generate";
 // cliente lo sustituye al hidratar (las rutas de reto resuelven su contenido
 // en render de cliente vía useMemo, cuando el store ya está rehidratado de
 // localStorage de forma síncrona). Ventaja: ningún llamador cambia de firma.
+// Red de seguridad de calidad (Fase 11): el temario persistido puede venir de
+// una versión anterior del generador (sin filtros). Antes de servir NADA, cada
+// pool pasa por filtrarPreguntasValidas (0 respuestas duplicadas, sin dobles
+// negaciones, sin huecos absurdos). Cache por identidad del objeto del store:
+// el saneado corre una vez por temario, no en cada render.
+let saneadoCache: { fuente: CustomContent; saneado: CustomContent } | null = null;
+
+function sanearCustomContent(c: CustomContent): CustomContent {
+  if (saneadoCache?.fuente === c) return saneadoCache.saneado;
+  const questionsByWorld = Object.fromEntries(
+    Object.entries(c.questionsByWorld).map(([mundo, qs]) => [mundo, filtrarPreguntasValidas(qs)]),
+  );
+  const preguntas = Object.values(questionsByWorld).reduce((acc, qs) => acc + qs.length, 0);
+  const saneado: CustomContent = {
+    ...c,
+    questionsByWorld,
+    stats: {
+      ...c.stats,
+      preguntas,
+      descartadas: (c.stats.descartadas ?? 0) + Math.max(0, c.stats.preguntas - preguntas),
+    },
+  };
+  saneadoCache = { fuente: c, saneado };
+  return saneado;
+}
+
 function getCustomContent(): CustomContent | null {
   if (typeof window === "undefined") return null;
-  return usePlayerStore.getState().customContent;
+  const c = usePlayerStore.getState().customContent;
+  return c ? sanearCustomContent(c) : null;
 }
 
 // Missions grouped by world (all worlds are playable demo content in Fase 3).
@@ -318,7 +345,37 @@ export function getSampleConcepts(): Concept[] {
 }
 
 // Ecuaciones de "Puentes de Ecuaciones" (Ciudad de los Algoritmos).
+// Con temario del alumno (Fase 11): el reto "tiende el puente" completando
+// frases-hueco (cloze) de SU documento — misma forma EquationPuzzle, misma
+// mecánica de elegir la pieza que cierra el hueco. Sin temario, las
+// ecuaciones demo de siempre. Determinista: se recorren los mundos en orden
+// estable y se toman las 5 primeras frases-hueco cortas.
+const PATRON_CLOZE = /^Completa la frase:\s*«(.+)»\s*$/u;
+/** Longitud máxima de la frase-hueco para que quepa en el rótulo del puente. */
+const MAX_FRASE_PUENTE = 150;
+
 export function getAlgoritmosEquations(): EquationPuzzle[] {
+  const custom = getCustomContent();
+  if (custom) {
+    const puzles: EquationPuzzle[] = [];
+    for (const mundo of MUNDOS_REPARTO) {
+      for (const q of custom.questionsByWorld[mundo] ?? []) {
+        const m = q.prompt.match(PATRON_CLOZE);
+        if (!m || m[1].length > MAX_FRASE_PUENTE) continue;
+        puzles.push({
+          id: `pz-${q.id}`,
+          equation: m[1],
+          options: q.options,
+          answer: q.answer,
+          solution: q.options[q.answer],
+        });
+        if (puzles.length >= 5) return puzles;
+      }
+    }
+    // Con al menos 3 huecos propios el puente ya es del temario del alumno;
+    // con menos, se mantiene la demo (aviso de material escaso ya dado).
+    if (puzles.length >= 3) return puzles;
+  }
   return ALGORITMOS_EQUATIONS;
 }
 
@@ -331,6 +388,15 @@ export type MissionContent = {
   concept: string;
   title?: string;
 };
+
+/**
+ * Preguntas que sirve una misión. 7 cubre al reto más hambriento (la Arena usa
+ * 6, el duelo y las cartas 5, el boss las que le den): así ningún minijuego se
+ * queda corto ni repite.
+ */
+const OBJETIVO_PREGUNTAS = 7;
+/** Por debajo de esto un reto no es jugable: se rellena con ejemplo. */
+const MIN_PREGUNTAS = 5;
 
 /**
  * Content for a challenge, resolved from its mission (`?m=` param). The generic
@@ -353,11 +419,30 @@ export function getMissionContent(missionId?: string): MissionContent {
       ? Math.max(0, getMissions(worldId).findIndex((m) => m.id === mission.id))
       : 0;
     const pool = custom.questionsByWorld[worldId] ?? [];
-    let questions = preguntasParaMision(pool, indice);
-    // Documento escaso: si el pool del mundo no llega al mínimo jugable, se
-    // completa con preguntas estáticas de ejemplo (relleno ya anunciado con
-    // honestidad en la biblioteca).
-    const MIN_PREGUNTAS = 5;
+    let questions = preguntasParaMision(pool, indice, OBJETIVO_PREGUNTAS);
+    // Documento escaso: antes de tocar el contenido demo, se PIDEN PRESTADAS
+    // preguntas de los pools de los demás mundos (Fase 11). Siguen siendo del
+    // temario del alumno, que es la promesa del producto; el reparto por
+    // mundos es solo una preferencia, no una frontera dura.
+    if (questions.length < OBJETIVO_PREGUNTAS) {
+      const yaPuestas = new Set(questions.map((q) => q.id));
+      // Recorrido determinista: mundos en orden fijo, arrancando por el
+      // siguiente al actual, para que cada mundo tome prestado de sitios
+      // distintos y no todos repitan las mismas preguntas.
+      const desde = Math.max(0, (MUNDOS_REPARTO as readonly string[]).indexOf(worldId));
+      for (let k = 1; k <= MUNDOS_REPARTO.length && questions.length < OBJETIVO_PREGUNTAS; k++) {
+        const otro = MUNDOS_REPARTO[(desde + k) % MUNDOS_REPARTO.length];
+        for (const q of custom.questionsByWorld[otro] ?? []) {
+          if (yaPuestas.has(q.id)) continue;
+          yaPuestas.add(q.id);
+          questions.push(q);
+          if (questions.length >= OBJETIVO_PREGUNTAS) break;
+        }
+      }
+    }
+    // Solo si el temario ENTERO no da ni el mínimo jugable se completa con
+    // preguntas de ejemplo (relleno ya anunciado con honestidad en la
+    // biblioteca).
     if (questions.length < MIN_PREGUNTAS) {
       questions = [...questions, ...content.questions.slice(0, MIN_PREGUNTAS - questions.length)];
     }

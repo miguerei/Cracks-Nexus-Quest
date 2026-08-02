@@ -44,6 +44,12 @@ export type ContentStats = {
   conceptos: number;
   preguntas: number;
   calidad: CalidadContenido;
+  /**
+   * Preguntas generadas que NO pasaron los filtros de calidad (Fase 11) y se
+   * descartaron antes de servirse. Opcional: los snapshots persistidos
+   * anteriores a la Fase 11 no lo tienen.
+   */
+  descartadas?: number;
 };
 
 export type GeneratedContent = {
@@ -177,15 +183,31 @@ export function detectarConceptos(texto: string): Concept[] {
 // ---- 3) Generación de preguntas ----
 
 /**
- * Opciones de MCQ sin duplicados (QA B2): si dos conceptos comparten texto,
- * el duplicado se descarta — con menos de 2 opciones la pregunta no vale,
- * así que garantizamos la respuesta + al menos un distractor distinto.
+ * Clave de comparación tolerante (Fase 11): minúsculas, sin acentos ni signos
+ * de puntuación ni espacios sobrantes. «Ósmosis.» y «osmosis» son la misma
+ * opción — evita distractores que en la práctica duplican la respuesta.
+ */
+function claveComparacion(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[.,;:¿?¡!«»"'()\-…]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Opciones de MCQ sin duplicados (QA B2, endurecido en Fase 11 con clave
+ * tolerante a acentos/puntuación): si dos conceptos comparten texto, el
+ * duplicado se descarta. La respuesta correcta va primero; el llamador decide
+ * si con las opciones restantes la pregunta vale o se descarta.
  */
 function dedupeOpciones(respuesta: string, ...distractores: string[]): string[] {
-  const vistos = new Set([respuesta.trim().toLowerCase()]);
+  const vistos = new Set([claveComparacion(respuesta)]);
   const limpios = distractores.filter((d) => {
-    const k = d.trim().toLowerCase();
-    if (vistos.has(k)) return false;
+    const k = claveComparacion(d);
+    if (!k || vistos.has(k)) return false;
     vistos.add(k);
     return true;
   });
@@ -198,6 +220,43 @@ function sinPuntoFinal(s: string): string {
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Negaciones que convierten un V/F en trampa de doble negación («¿Verdadero
+ * que NO tiene…?»). Las afirmaciones con negación se descartan del V/F.
+ */
+const PATRON_NEGACION = /\b(?:no|nunca|jam[aá]s|ning[uú]n[oa]?|tampoco|ni)\b/iu;
+
+/**
+ * Construye las 3 opciones de un MCQ: respuesta + 2 distractores hermanos
+ * REALMENTE distintos (clave tolerante a acentos/puntuación). Recorre más
+ * hermanos si los primeros duplican la respuesta. Devuelve null si el
+ * documento no da ni 2 distractores distintos: mejor descartar la pregunta
+ * que servir un MCQ de una sola opción plausible.
+ */
+function opcionesMcq(
+  correcta: string,
+  candidatos: string[],
+  rng: () => number,
+): string[] | null {
+  const opciones = dedupeOpciones(correcta, ...candidatos).slice(0, 3);
+  if (opciones.length < 3) return null;
+  return mezclar(opciones, rng);
+}
+
+/** Distractores candidatos: el mismo campo de hasta 6 conceptos hermanos. */
+function candidatosHermanos(
+  conceptos: Concept[],
+  i: number,
+  campo: "term" | "definition",
+): string[] {
+  const n = conceptos.length;
+  const lista: string[] = [];
+  for (let paso = 1; paso <= Math.min(6, n - 1); paso++) {
+    lista.push(conceptos[(i + paso) % n][campo]);
+  }
+  return lista;
 }
 
 /**
@@ -225,40 +284,53 @@ export function generarPreguntas(
   const n = conceptos.length;
   conceptos.forEach((c, i) => {
     const h1 = conceptos[(i + 1) % n];
-    const h2 = conceptos[(i + 2) % n];
 
     // (a) MCQ definición: distractores = definiciones de términos hermanos.
-    const opcionesDef = mezclar(dedupeOpciones(c.definition, h1.definition, h2.definition), rng);
-    agregar({
-      prompt: `¿Qué es «${c.term}»?`,
-      options: opcionesDef,
-      answer: opcionesDef.indexOf(c.definition),
-      concept: c.term,
-    });
+    // Si no hay 2 definiciones hermanas realmente distintas, se descarta.
+    const opcionesDef = opcionesMcq(c.definition, candidatosHermanos(conceptos, i, "definition"), rng);
+    if (opcionesDef) {
+      agregar({
+        prompt: `¿Qué es «${c.term}»?`,
+        options: opcionesDef,
+        answer: opcionesDef.indexOf(c.definition),
+        concept: c.term,
+      });
+    }
 
     // (b) MCQ inverso: distractores = términos hermanos.
-    const opcionesTerm = mezclar(dedupeOpciones(c.term, h1.term, h2.term), rng);
-    agregar({
-      prompt: `¿A qué concepto corresponde esta definición? «${sinPuntoFinal(c.definition)}»`,
-      options: opcionesTerm,
-      answer: opcionesTerm.indexOf(c.term),
-      concept: c.term,
-    });
+    const opcionesTerm = opcionesMcq(c.term, candidatosHermanos(conceptos, i, "term"), rng);
+    if (opcionesTerm) {
+      agregar({
+        prompt: `¿A qué concepto corresponde esta definición? «${sinPuntoFinal(c.definition)}»`,
+        options: opcionesTerm,
+        answer: opcionesTerm.indexOf(c.term),
+        concept: c.term,
+      });
+    }
 
     // (c) V/F: alterna afirmación verdadera y alterada (definición de hermano).
+    // Sin dobles negaciones (Fase 11): si la definición mostrada ya contiene
+    // una negación, el «¿Verdadero o falso?» se vuelve trampa lingüística en
+    // vez de reto de conocimiento — se descarta.
     const esVerdadera = i % 2 === 0;
     const defMostrada = esVerdadera ? c.definition : h1.definition;
-    agregar({
-      prompt: `¿Verdadero o falso? ${c.term}: «${sinPuntoFinal(defMostrada)}».`,
-      options: ["Verdadero", "Falso"],
-      answer: esVerdadera ? 0 : 1,
-      concept: c.term,
-    });
+    const defDistinta = claveComparacion(defMostrada) !== claveComparacion(c.definition) || esVerdadera;
+    if (!PATRON_NEGACION.test(defMostrada) && defDistinta) {
+      agregar({
+        prompt: `¿Verdadero o falso? ${c.term}: «${sinPuntoFinal(defMostrada)}».`,
+        options: ["Verdadero", "Falso"],
+        answer: esVerdadera ? 0 : 1,
+        concept: c.term,
+      });
+    }
   });
 
   // (d) Cloze: una frase clave por concepto (si el documento la ofrece y no es
   // la propia frase-definición, para no regalar la respuesta).
   conceptos.forEach((c, i) => {
+    // Huecos absurdos fuera (Fase 11): términos cortísimos o numéricos no
+    // sostienen un «completa la frase» digno.
+    if (c.term.length < 4 || /^[\d\s.,%-]+$/.test(c.term)) return;
     const inicioDef = sinPuntoFinal(c.definition).slice(0, 30).toLowerCase();
     // \\b es ASCII: falla con términos que empiezan/terminan en vocal acentuada
     // («ósmosis», «colibrí»). Lookarounds Unicode con flag "u" (QA B1).
@@ -272,9 +344,10 @@ export function generarPreguntas(
     if (!frase) return;
     const conHueco = frase.replace(patron, "____");
     if (!conHueco.includes("____")) return;
-    const h1 = conceptos[(i + 1) % n];
-    const h2 = conceptos[(i + 2) % n];
-    const opciones = mezclar([c.term, h1.term, h2.term], rng);
+    // Contexto suficiente: sin el hueco deben quedar al menos 30 caracteres.
+    if (conHueco.replace(/_+/g, "").trim().length < 30) return;
+    const opciones = opcionesMcq(c.term, candidatosHermanos(conceptos, i, "term"), rng);
+    if (!opciones) return;
     agregar({
       prompt: `Completa la frase: «${conHueco}»`,
       options: opciones,
@@ -284,6 +357,52 @@ export function generarPreguntas(
   });
 
   return preguntas;
+}
+
+// ---- 3b) Filtros de calidad (Fase 11) ----
+// El generador ya evita producir preguntas malas, pero este filtro es la RED
+// DE SEGURIDAD que se aplica también al contenido persistido por versiones
+// anteriores (gameService lo pasa antes de servir cualquier pool custom).
+
+/**
+ * Por qué se descartaría una pregunta, o null si es válida. Exportado para
+ * que el smoke test y el informe de calidad puedan explicar los descartes.
+ */
+export function motivoDescarte(q: Question): string | null {
+  if (!q.prompt || q.prompt.trim().length < 12) return "enunciado demasiado corto";
+  if (q.prompt.length > 340) return "enunciado demasiado largo";
+  if (!Array.isArray(q.options) || q.options.length < 2) return "menos de 2 opciones";
+  if (!Number.isInteger(q.answer) || q.answer < 0 || q.answer >= q.options.length) {
+    return "índice de respuesta fuera de rango";
+  }
+  const claves = q.options.map(claveComparacion);
+  if (claves.some((k) => !k)) return "opción vacía";
+  if (new Set(claves).size !== claves.length) {
+    return "opciones duplicadas (un distractor repite la respuesta)";
+  }
+  const esVF = claves.length === 2 && claves.includes("verdadero") && claves.includes("falso");
+  if (esVF) {
+    // El prompt V/F es «¿Verdadero o falso? Término: “afirmación”.»: solo la
+    // afirmación citada cuenta para la doble negación.
+    const afirmacion = q.prompt.replace(/^¿Verdadero o falso\?/iu, "");
+    if (PATRON_NEGACION.test(afirmacion)) return "V/F con negación (doble negación)";
+    return null;
+  }
+  if (q.options.length < 3) return "MCQ con un solo distractor";
+  const correcta = q.options[q.answer];
+  if (q.prompt.includes("____")) {
+    if (correcta.trim().length < 3) return "hueco de 1-2 letras (absurdo)";
+    if (/^[\d\s.,%-]+$/.test(correcta)) return "hueco numérico suelto";
+    if (q.prompt.replace(/_+/g, "").replace(/^Completa la frase:\s*/iu, "").trim().length < 30) {
+      return "cloze sin contexto suficiente";
+    }
+  }
+  return null;
+}
+
+/** Deja pasar solo las preguntas que superan todos los filtros de calidad. */
+export function filtrarPreguntasValidas(preguntas: Question[]): Question[] {
+  return preguntas.filter((q) => motivoDescarte(q) === null);
 }
 
 // ---- 4) Reparto por mundos ----
@@ -345,7 +464,9 @@ export function generarContenido(texto: string): GeneratedContent {
   const semilla = semillaDeTexto(texto);
   const frases = segmentarFrases(texto);
   const concepts = detectarConceptos(texto);
-  const preguntas = generarPreguntas(concepts, frases, semilla);
+  const generadas = generarPreguntas(concepts, frases, semilla);
+  // Red de seguridad de calidad (Fase 11): nada malo llega a los mundos.
+  const preguntas = filtrarPreguntasValidas(generadas);
   return {
     concepts,
     questionsByWorld: repartirPorMundos(preguntas, semilla),
@@ -353,6 +474,7 @@ export function generarContenido(texto: string): GeneratedContent {
       conceptos: concepts.length,
       preguntas: preguntas.length,
       calidad: calcularCalidad(concepts.length, preguntas.length),
+      descartadas: generadas.length - preguntas.length,
     },
   };
 }

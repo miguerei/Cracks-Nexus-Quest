@@ -22,6 +22,7 @@ import { cederTurno, extraerDeTextoPegado, extraerTexto, type ExtractProgress } 
 import {
   calcularCalidad,
   detectarConceptos,
+  filtrarPreguntasValidas,
   generarPreguntas,
   repartirPorMundos,
   segmentarFrases,
@@ -109,11 +110,14 @@ function Analyzing() {
         const frases = segmentarFrases(extraccion.text);
         const conceptos = detectarConceptos(extraccion.text);
 
-        // 3) Generar preguntas (MCQ, V/F, cloze) con semilla del propio texto.
+        // 3) Generar preguntas (MCQ, V/F, cloze) con semilla del propio texto
+        //    y pasar el filtro de calidad (Fase 11): fuera respuestas
+        //    duplicadas, dobles negaciones y huecos absurdos.
         setPaso(2);
         await cederTurno();
         const semilla = semillaDeTexto(extraccion.text);
-        const preguntas = generarPreguntas(conceptos, frases, semilla);
+        const generadas = generarPreguntas(conceptos, frases, semilla);
+        const preguntas = filtrarPreguntasValidas(generadas);
         if (conceptos.length < 3 || preguntas.length === 0) {
           throw new Error(
             "No he encontrado suficientes definiciones en el documento (necesito al menos 3 conceptos tipo «X es…» o «Término: definición»). Prueba con unos apuntes más teóricos.",
@@ -128,6 +132,7 @@ function Analyzing() {
           conceptos: conceptos.length,
           preguntas: preguntas.length,
           calidad: calcularCalidad(conceptos.length, preguntas.length),
+          descartadas: generadas.length - preguntas.length,
         };
         setCustomContent({
           docName: nombre,
@@ -274,6 +279,11 @@ function ResumenAnalisis({
         <span className={cn("rounded-full border px-3 py-1.5 text-xs font-bold", etiqueta.clase)}>
           {etiqueta.texto}
         </span>
+        {(stats.descartadas ?? 0) > 0 && (
+          <span className="rounded-full border border-border bg-card/60 px-3 py-1.5 text-xs font-bold text-muted-foreground">
+            {stats.descartadas} descartadas por calidad
+          </span>
+        )}
       </div>
 
       {aviso && (

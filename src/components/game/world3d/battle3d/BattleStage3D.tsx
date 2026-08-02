@@ -1,11 +1,14 @@
 // battle3d/BattleStage3D.tsx — escenario de combate 3D (fondo del reto).
 //
-// El plano canon del vídeo intro: héroe DE ESPALDAS ante el enemigo entre
-// ruinas. Responder bien = hechizo (anticipación → ARCO ELÉCTRICO azul →
+// FASE 11 — plano canon "apuntando al gigante" (fotograma GAMEPLAY 9.5s):
+// cámara BAJA detrás del grupo, héroe DE ESPALDAS grande en primer término
+// inferior y el enemigo ENORME arriba-fondo (la diagonal cuenta la escala).
+// Responder bien = hechizo (anticipación → ARCO ELÉCTRICO azul →
 // proyectil cristalino con estela → impacto en el NÚCLEO: destello, anillos
-// de onda, partículas ascendentes). Fallar = pulso de niebla violeta hacia el
-// héroe con sacudida sutil (nunca castigo dramático). Victoria = disolución
-// en partículas doradas+azules. Derrota = desvanecerse en niebla, sereno.
+// de onda, partículas ascendentes, sacudida breve ≤150 ms). Fallar = pulso de
+// niebla violeta hacia el héroe con sacudida sutil (nunca castigo dramático).
+// Victoria = disolución en partículas doradas+azules. Derrota = desvanecerse
+// en niebla, sereno.
 //
 // Reglas duras: client-only (se monta lazy tras <ClientOnly>), determinista
 // (mulberry32), animación por refs en useFrame (jamás setState por frame),
@@ -23,7 +26,7 @@ import { StageActor, type StagePose } from "./stageActors";
 import { HordeShades, RivalEnemy, RuneWard, VoidColossus, createEnemyFx, type EnemyFx } from "./enemies";
 import RuinsArena from "./RuinsArena";
 import { cssColorToHex, mulberry32 } from "./battleUtils";
-import { HERO_HIP_Y, HERO_POS, HERO_SCALE, STAGE_CFG } from "./stageConfig";
+import { HERO_HIP_Y, STAGE_CFG } from "./stageConfig";
 import type { BattleEvent, BattleEventKind, BattleStage3DProps, StageVariant } from "./types";
 
 const AZUL_HECHIZO = "#38bdf8";
@@ -38,7 +41,7 @@ const WINDUP = 0.22;
 const FLIGHT = 0.5;
 /** Tamaño de los pools de VFX (pequeños, se reutilizan siempre). */
 const PART_N = 16;
-const TRAIL_N = 6;
+const TRAIL_N = 8;
 const ARC_N = 11;
 
 // ---------------------------------------------------------------------------
@@ -82,7 +85,7 @@ function CameraRig({ variant, shakeRef }: { variant: StageVariant; shakeRef: Mut
   const cfg = STAGE_CFG[variant];
   useFrame((state, dt) => {
     const t = state.clock.elapsedTime;
-    shakeRef.current = Math.max(0, shakeRef.current - dt * 2.2);
+    shakeRef.current = Math.max(0, shakeRef.current - dt * 2.6);
     const s = shakeRef.current;
     const ox = Math.sin(t * 39) * 0.09 * s + Math.sin(t * 0.4) * 0.06;
     const oy = Math.cos(t * 47) * 0.07 * s + Math.sin(t * 0.27) * 0.05;
@@ -148,7 +151,10 @@ function BattleVFX({
   // Vectores/datos preasignados (cero allocaciones por frame).
   const handV = useMemo(() => new THREE.Vector3(...cfg.hand), [cfg]);
   const coreV = useMemo(() => new THREE.Vector3(...cfg.core), [cfg]);
-  const pulseEndV = useMemo(() => new THREE.Vector3(HERO_POS[0] + 0.7, 1.8, HERO_POS[2] - 1.4), []);
+  const pulseEndV = useMemo(
+    () => new THREE.Vector3(cfg.hero[0] + 0.7, 1.3 + 0.5 * cfg.heroScale, cfg.hero[2] - 1.4),
+    [cfg],
+  );
   const tmpV = useMemo(() => new THREE.Vector3(), []);
 
   // Direcciones deterministas de las ráfagas de partículas (ascendentes).
@@ -260,7 +266,7 @@ function BattleVFX({
           rx = -0.14 * (1 - u);
         }
       }
-      rig.position.z = HERO_POS[2] + dz;
+      rig.position.z = cfg.hero[2] + dz;
       rig.rotation.x = rx;
     }
 
@@ -304,17 +310,17 @@ function BattleVFX({
       proj.position.copy(tmpV);
       proj.rotation.x += dt * 9;
       proj.rotation.y += dt * 13;
-      lightInt = 6;
+      lightInt = 7;
       lightColor = AZUL_HECHIZO;
       if (fxLight.current) fxLight.current.position.copy(proj.position);
       if (u >= 1) {
-        // ¡Impacto en el núcleo!
+        // ¡Impacto en el núcleo! (sacudida breve: 0.34 / 2.6 ≈ 130 ms)
         r.impacted = true;
         r.impactAt = t;
         proj.visible = false;
         fx.recoil = 1;
         fx.flash = 1;
-        shakeRef.current = Math.max(shakeRef.current, 0.22);
+        shakeRef.current = Math.max(shakeRef.current, 0.34);
         spawnBurst(r.kind === "victory");
       }
     }
@@ -326,8 +332,8 @@ function BattleVFX({
       const g = ghostRefs.current[i];
       if (!g) continue;
       const target = i === 0 ? proj?.position : ghostRefs.current[i - 1]?.position;
-      if (target) g.position.lerp(target, Math.min(1, dt * (15 - i * 1.6)));
-      const op = (0.5 - i * 0.065) * r.ghostFade;
+      if (target) g.position.lerp(target, Math.min(1, dt * (16 - i * 1.5)));
+      const op = (0.56 - i * 0.06) * r.ghostFade;
       g.visible = op > 0.02;
       (g.material as THREE.MeshStandardMaterial).opacity = op;
     }
@@ -339,8 +345,8 @@ function BattleVFX({
       const u = k / 0.22;
       if (u >= 0 && u < 1) {
         flash.visible = true;
-        flash.scale.setScalar(0.6 + u * 1.6);
-        (flash.material as THREE.MeshStandardMaterial).opacity = 0.9 * (1 - u);
+        flash.scale.setScalar(0.7 + u * 2.2);
+        (flash.material as THREE.MeshStandardMaterial).opacity = 0.92 * (1 - u);
       } else flash.visible = false;
     }
     for (let ri = 0; ri < 2; ri++) {
@@ -349,12 +355,12 @@ function BattleVFX({
       const u = (k - ri * 0.12) / 0.55;
       if (u >= 0 && u < 1) {
         ring.visible = true;
-        ring.scale.setScalar(0.5 + u * 3.2);
-        (ring.material as THREE.MeshStandardMaterial).opacity = 0.75 * (1 - u);
+        ring.scale.setScalar(0.5 + u * 3.8);
+        (ring.material as THREE.MeshStandardMaterial).opacity = 0.78 * (1 - u);
       } else ring.visible = false;
     }
     if (r.impacted && k < 0.45) {
-      lightInt = Math.max(lightInt, 8 * (1 - k / 0.45));
+      lightInt = Math.max(lightInt, 9 * (1 - k / 0.45));
       lightColor = BLANCO_MAGICO;
       if (fxLight.current) fxLight.current.position.copy(coreV);
     }
@@ -435,11 +441,11 @@ function BattleVFX({
       {/* Proyectil: cristal octaédrico azul con corazón blanco */}
       <group ref={projRef} visible={false}>
         <mesh>
-          <octahedronGeometry args={[0.22, 0]} />
+          <octahedronGeometry args={[0.26, 0]} />
           <meshStandardMaterial color={AZUL_HECHIZO} emissive={AZUL_HECHIZO} emissiveIntensity={2.4} flatShading />
         </mesh>
         <mesh>
-          <octahedronGeometry args={[0.1, 0]} />
+          <octahedronGeometry args={[0.12, 0]} />
           <meshStandardMaterial color={BLANCO_MAGICO} emissive={BLANCO_MAGICO} emissiveIntensity={3} />
         </mesh>
       </group>
@@ -452,10 +458,10 @@ function BattleVFX({
             ghostRefs.current[i] = el;
           }}
           visible={false}
-          scale={0.17 - i * 0.02}
+          scale={0.2 - i * 0.018}
         >
           <octahedronGeometry args={[1, 0]} />
-          <meshStandardMaterial color={AZUL_HECHIZO} emissive={AZUL_HECHIZO} emissiveIntensity={1.8} transparent opacity={0.4} />
+          <meshStandardMaterial color={AZUL_HECHIZO} emissive={AZUL_HECHIZO} emissiveIntensity={2.2} transparent opacity={0.4} />
         </mesh>
       ))}
 
@@ -582,7 +588,7 @@ export default function BattleStage3D({ variant, classId, heroColor, event }: Ba
   const shakeRef = useRef(0);
   const heroRig = useRef<THREE.Group>(null);
   // El héroe mira SIEMPRE al enemigo (de espaldas a cámara).
-  const facingRef = useRef(Math.atan2(cfg.enemyPos[0] - HERO_POS[0], cfg.enemyPos[2] - HERO_POS[2]));
+  const facingRef = useRef(Math.atan2(cfg.enemyPos[0] - cfg.hero[0], cfg.enemyPos[2] - cfg.hero[2]));
   // Poses del rig animado, sincronizadas con los tiempos del VFX.
   const { hero: heroPose, rival: rivalPose } = useStagePoses(event);
 
@@ -599,7 +605,7 @@ export default function BattleStage3D({ variant, classId, heroColor, event }: Ba
       {/* Luz de luna fría + rebote + CONTRALUCES (Cine Pass): el rim de
           cfg.rim recorta al enemigo con fuerza y un segundo rim bajo recorta
           la espalda del héroe en primer término (canon del vídeo). */}
-      <ambientLight color={variant === "boss" ? "#5a4a78" : "#56648a"} intensity={0.66} />
+      <ambientLight color={variant === "boss" ? "#4f5a8a" : "#56648a"} intensity={0.66} />
       <hemisphereLight color="#7a8fb8" groundColor="#2a2438" intensity={0.62} />
       <directionalLight position={[-6, 11, 9]} intensity={1.15} color="#9fc3ee" />
       <directionalLight position={[4, 7, -12]} intensity={1.25} color={cfg.rim} />
@@ -608,9 +614,14 @@ export default function BattleStage3D({ variant, classId, heroColor, event }: Ba
       <Suspense fallback={null}>
         <RuinsArena variant={variant} />
 
-        {/* Héroe de espaldas, primer término inferior-izquierda.
+        {/* Héroe de espaldas, GRANDE en primer término inferior (Fase 11:
+            la cámara baja tras él dibuja la diagonal hacia el gigante).
             StageActor: rig animado (Adventurer) si existe; HeroModel si no. */}
-        <group ref={heroRig} position={[HERO_POS[0], HERO_HIP_Y, HERO_POS[2]]} scale={HERO_SCALE}>
+        <group
+          ref={heroRig}
+          position={[cfg.hero[0], HERO_HIP_Y * cfg.heroScale, cfg.hero[2]]}
+          scale={cfg.heroScale}
+        >
           <StageActor
             variant="hero"
             classId={classId}
@@ -623,8 +634,8 @@ export default function BattleStage3D({ variant, classId, heroColor, event }: Ba
           />
         </group>
 
-        {/* Enemigo al fondo centro */}
-        <group position={cfg.enemyPos}>
+        {/* Enemigo ENORME al fondo centro-arriba (cfg.enemyScale) */}
+        <group position={cfg.enemyPos} scale={cfg.enemyScale}>
           {variant === "boss" ? (
             <VoidColossus fxRef={enemyFx} />
           ) : variant === "runas" ? (

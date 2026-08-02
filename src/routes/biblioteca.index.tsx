@@ -18,9 +18,10 @@ import { GameHud } from "@/components/hud/GameHud";
 import { NovaBubble } from "@/components/hud/NovaBubble";
 import { usePlayerStore } from "@/store/usePlayerStore";
 import { useAuthStore } from "@/store/useAuthStore";
-import { getSampleDocuments, getSubject } from "@/services/gameService";
+import { getSampleDocuments, getSubject, getWorlds } from "@/services/gameService";
 import { setPendingSource } from "@/lib/content/pending";
 import { formatoDeArchivo } from "@/lib/content/extract";
+import { MUNDOS_REPARTO } from "@/lib/content/generate";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -33,6 +34,10 @@ const SAMPLE_DOCS = getSampleDocuments();
 const SUBJECT = getSubject();
 /** Mínimo de caracteres para que el análisis heurístico tenga material. */
 const MIN_TEXTO_PEGADO = 200;
+/** Texto pegado por debajo de esto: se avisa de material escaso (Fase 11). */
+const TEXTO_PEGADO_HOLGADO = 1800;
+/** Tope razonable de archivo: por encima, el navegador sufre (Fase 11). */
+const MAX_BYTES = 40 * 1024 * 1024;
 
 type ReceivedDoc = {
   name: string;
@@ -50,6 +55,9 @@ function fileExt(name: string): string {
   const dot = name.lastIndexOf(".");
   return dot >= 0 ? name.slice(dot + 1).toUpperCase() : "DOC";
 }
+
+const WORLDS = getWorlds();
+const nombreMundo = (id: string) => WORLDS.find((w) => w.id === id)?.name ?? id;
 
 function formatSize(bytes: number | null): string | null {
   if (bytes == null) return null;
@@ -70,6 +78,9 @@ function Biblioteca() {
   const [textoPegado, setTextoPegado] = useState("");
   const [nombrePegado, setNombrePegado] = useState("");
   const [uploading, setUploading] = useState(false);
+  // Evita dobles pulsaciones mientras se navega a la pantalla de análisis
+  // (con PDF grandes el usuario tiende a insistir en el botón).
+  const [preparando, setPreparando] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   function pickSample(name: string) {
@@ -82,9 +93,23 @@ function Biblioteca() {
   // si falla, el análisis local sigue funcionando igual). Los invitados no
   // suben nada — el documento no sale de su dispositivo.
   async function handleFile(file: File) {
+    // Validaciones en español ANTES de aceptar el archivo (Fase 11): formato,
+    // fichero vacío y tamaño desmesurado. Nada de errores crípticos después.
     if (!formatoDeArchivo(file.name)) {
       toast.error("Formato no soportado", {
         description: "Usa PDF, DOCX, TXT o MD — o pega el texto directamente.",
+      });
+      return;
+    }
+    if (file.size === 0) {
+      toast.error("El archivo está vacío", {
+        description: "Ese documento ocupa 0 bytes. Elige otro o pega el texto directamente.",
+      });
+      return;
+    }
+    if (file.size > MAX_BYTES) {
+      toast.error("Archivo demasiado grande", {
+        description: `Máximo ${Math.round(MAX_BYTES / (1024 * 1024))} MB. Sube solo el tema que vas a estudiar o pega su texto.`,
       });
       return;
     }
@@ -115,7 +140,8 @@ function Biblioteca() {
   }
 
   function analyze() {
-    if (!received) return;
+    if (!received || preparando) return;
+    setPreparando(true);
     if (received.source === "file" && received.file) {
       // Análisis REAL en el dispositivo: la ruta "analizando" extrae el texto
       // y genera los retos con el generador heurístico.
@@ -129,7 +155,8 @@ function Biblioteca() {
 
   function analyzePasted() {
     const texto = textoPegado.trim();
-    if (texto.length < MIN_TEXTO_PEGADO) return;
+    if (texto.length < MIN_TEXTO_PEGADO || preparando) return;
+    setPreparando(true);
     const nombre = nombrePegado.trim() || "Texto pegado";
     setDocument(nombre);
     setPendingSource({ kind: "texto", texto, nombre });
@@ -153,28 +180,53 @@ function Biblioteca() {
 
         {/* Estado del contenido activo: temario del alumno o ejemplo */}
         {customContent ? (
-          <div className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-energy/40 bg-energy/10 px-4 py-3">
-            <BookOpenCheck className="h-5 w-5 shrink-0 text-energy" />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-bold text-energy">
-                Jugando con tu temario: {customContent.docName}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {customContent.stats.conceptos} conceptos · {customContent.stats.preguntas} preguntas generadas
-              </p>
+          <div className="mb-6 rounded-2xl border border-energy/40 bg-energy/10 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <BookOpenCheck className="h-5 w-5 shrink-0 text-energy" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold text-energy">
+                  Jugando con tu temario: {customContent.docName}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {customContent.stats.conceptos} conceptos · {customContent.stats.preguntas} preguntas generadas
+                  {(customContent.stats.descartadas ?? 0) > 0
+                    ? ` · ${customContent.stats.descartadas} descartadas por calidad`
+                    : ""}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  clearCustomContent();
+                  setReceived(null);
+                  toast.success("Contenido de ejemplo restaurado", {
+                    description: "Los retos vuelven a usar el contenido demo.",
+                  });
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-background/60 px-3 py-2 text-xs font-semibold transition hover:border-primary/60"
+              >
+                <RotateCcw className="h-3.5 w-3.5" /> Volver al contenido de ejemplo
+              </button>
             </div>
-            <button
-              onClick={() => {
-                clearCustomContent();
-                setReceived(null);
-                toast.success("Contenido de ejemplo restaurado", {
-                  description: "Los retos vuelven a usar el contenido demo.",
-                });
-              }}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-background/60 px-3 py-2 text-xs font-semibold transition hover:border-primary/60"
-            >
-              <RotateCcw className="h-3.5 w-3.5" /> Volver al contenido de ejemplo
-            </button>
+
+            {/* Reparto real por mundos: el alumno ve dónde caen SUS preguntas */}
+            <div className="mt-3 flex flex-wrap gap-1.5 border-t border-energy/20 pt-3">
+              {MUNDOS_REPARTO.map((id) => (
+                <span
+                  key={id}
+                  className="rounded-full border border-border bg-background/50 px-2.5 py-1 text-[11px] text-muted-foreground"
+                >
+                  {nombreMundo(id)} · <span className="font-bold text-foreground">{customContent.questionsByWorld[id]?.length ?? 0}</span>
+                </span>
+              ))}
+            </div>
+
+            {customContent.stats.calidad === "escaso" && (
+              <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                Material escaso: tu documento dio {customContent.stats.preguntas} preguntas reales, así que algunos
+                retos se completarán con preguntas de ejemplo. Sube un temario con más definiciones para jugar solo
+                con lo tuyo.
+              </p>
+            )}
           </div>
         ) : (
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card/50 px-4 py-1.5 text-xs font-semibold text-muted-foreground">
@@ -313,10 +365,14 @@ function Biblioteca() {
 
                   <button
                     onClick={analyze}
-                    disabled={uploading}
+                    disabled={uploading || preparando}
                     className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-nexus px-6 py-3.5 font-bold text-primary-foreground glow-primary transition hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100"
                   >
-                    <Sparkles className="h-5 w-5" /> Generar retos con este contenido
+                    {preparando ? (
+                      <><Loader2 className="h-5 w-5 animate-spin" /> Abriendo el análisis…</>
+                    ) : (
+                      <><Sparkles className="h-5 w-5" /> Generar retos con este contenido</>
+                    )}
                   </button>
                 </div>
               </motion.div>
@@ -356,12 +412,24 @@ function Biblioteca() {
                 ? `${textoPegado.trim().length}/${MIN_TEXTO_PEGADO} caracteres mínimos para analizar`
                 : `${textoPegado.trim().length} caracteres — listo para analizar`}
             </p>
+            {/* Aviso honesto de material escaso antes de gastar el análisis */}
+            {textoPegado.trim().length >= MIN_TEXTO_PEGADO &&
+              textoPegado.trim().length < TEXTO_PEGADO_HOLGADO && (
+                <p className="mt-2 rounded-xl border border-accent/40 bg-accent/10 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+                  Material escaso: con este texto saldrán pocas preguntas y algunos retos se completarán con
+                  contenido de ejemplo. Pega más apuntes para jugar solo con lo tuyo.
+                </p>
+              )}
             <button
               onClick={analyzePasted}
-              disabled={textoPegado.trim().length < MIN_TEXTO_PEGADO}
+              disabled={textoPegado.trim().length < MIN_TEXTO_PEGADO || preparando}
               className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-nexus px-6 py-3.5 font-bold text-primary-foreground glow-primary transition hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
             >
-              <Sparkles className="h-5 w-5" /> Generar retos con este texto
+              {preparando ? (
+                <><Loader2 className="h-5 w-5 animate-spin" /> Abriendo el análisis…</>
+              ) : (
+                <><Sparkles className="h-5 w-5" /> Generar retos con este texto</>
+              )}
             </button>
           </motion.div>
         )}

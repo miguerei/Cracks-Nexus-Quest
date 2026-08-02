@@ -9,7 +9,7 @@ import {
   type LeagueId,
   type Question,
 } from "@/data/game";
-import type { ContentStats } from "@/lib/content/generate";
+import { filtrarPreguntasValidas, type ContentStats } from "@/lib/content/generate";
 
 export type PlayerAvatar = {
   name: string;
@@ -240,13 +240,37 @@ export const usePlayerStore = create<PlayerState>()(
     }),
     {
       name: "nexus-quest-player",
-      // v4 (Fase 6): añade `customContent` (temario del alumno) persistido.
-      version: 4,
+      // v5 (Fase 11): el temario persistido pasa por los filtros de calidad
+      // (opciones duplicadas, dobles negaciones, huecos absurdos) y las stats
+      // se recalculan con honestidad. v4 (Fase 6): añade `customContent`.
+      version: 5,
       migrate: (persisted, version) => {
-        const estado = persisted as Partial<PlayerState>;
+        let estado = persisted as Partial<PlayerState>;
         // Snapshots v3 (o anteriores) no tienen customContent: se añade nulo
         // sin tocar el resto del progreso del jugador.
-        if (version < 4) return { ...estado, customContent: null };
+        if (version < 4) estado = { ...estado, customContent: null };
+        if (version < 5 && estado.customContent) {
+          const previo = estado.customContent;
+          const questionsByWorld = Object.fromEntries(
+            Object.entries(previo.questionsByWorld ?? {}).map(([mundo, qs]) => [
+              mundo,
+              filtrarPreguntasValidas(qs ?? []),
+            ]),
+          );
+          const preguntas = Object.values(questionsByWorld).reduce((a, qs) => a + qs.length, 0);
+          estado = {
+            ...estado,
+            customContent: {
+              ...previo,
+              questionsByWorld,
+              stats: {
+                ...previo.stats,
+                preguntas,
+                descartadas: Math.max(0, (previo.stats?.preguntas ?? preguntas) - preguntas),
+              },
+            },
+          };
+        }
         return estado;
       },
     },
