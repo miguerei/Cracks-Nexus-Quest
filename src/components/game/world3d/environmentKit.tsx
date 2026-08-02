@@ -1199,6 +1199,392 @@ export function KitBankRocks({
 }
 
 // ---------------------------------------------------------------------------
+// Fase 11 — Textura de sillería (canvas 256², true-color casi blanca): hiladas
+// de bloques claros con juntas oscuras, desconchones y musgo brotando de las
+// juntas. Se multiplica con el color `stone` del material, así una sola
+// textura sirve para la piedra de cualquier bioma.
+// ---------------------------------------------------------------------------
+export function makeMasonryTexture(seed = 401, moss = 0.5) {
+  const S = 256;
+  const c = document.createElement("canvas");
+  c.width = c.height = S;
+  const g = c.getContext("2d")!;
+  const rnd = mulberry32(seed);
+  g.fillStyle = "rgb(206,200,182)";
+  g.fillRect(0, 0, S, S);
+  const rows = 3;
+  const cols = 3;
+  const rh = S / rows;
+  const cw = S / cols;
+  // Bloques con variación de luminancia y desconchones.
+  for (let r = 0; r < rows; r++) {
+    const off = (r % 2) * (cw / 2);
+    for (let k = -1; k < cols; k++) {
+      const x0 = k * cw + off;
+      const lum = 198 + Math.floor(rnd() * 42);
+      g.fillStyle = `rgb(${lum},${lum - 5},${Math.max(0, lum - 26)})`;
+      g.fillRect(x0 + 3, r * rh + 3, cw - 6, rh - 6);
+      for (let d = 0; d < 3; d++) {
+        const l2 = lum - 20 - Math.floor(rnd() * 28);
+        g.fillStyle = `rgba(${l2},${l2 - 4},${l2 - 16},0.5)`;
+        g.beginPath();
+        g.ellipse(x0 + rnd() * cw, r * rh + rnd() * rh, 4 + rnd() * 12, 3 + rnd() * 8, rnd() * 3, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+  }
+  // Juntas oscuras (horizontales continuas, verticales alternadas por hilada).
+  g.strokeStyle = "rgba(64,60,48,0.85)";
+  g.lineWidth = 4;
+  for (let r = 0; r <= rows; r++) {
+    g.beginPath();
+    g.moveTo(0, r * rh);
+    g.lineTo(S, r * rh);
+    g.stroke();
+  }
+  for (let r = 0; r < rows; r++) {
+    const off = (r % 2) * (cw / 2);
+    for (let k = 0; k <= cols; k++) {
+      const x0 = (k * cw + off) % S;
+      g.beginPath();
+      g.moveTo(x0, r * rh);
+      g.lineTo(x0, (r + 1) * rh);
+      g.stroke();
+    }
+  }
+  // Musgo en las juntas: manchas verdes difusas ancladas a las líneas.
+  const n = Math.round(18 * moss);
+  for (let i = 0; i < n; i++) {
+    const horizontal = rnd() > 0.35;
+    const mx = horizontal ? rnd() * S : (Math.floor(rnd() * (cols + 1)) * cw + (Math.floor(rnd() * rows) % 2) * (cw / 2)) % S;
+    const my = horizontal ? (Math.floor(rnd() * (rows + 1)) * rh) % S : rnd() * S;
+    const rr = 5 + rnd() * 11;
+    const grad = g.createRadialGradient(mx, my, 0, mx, my, rr);
+    grad.addColorStop(0, "rgba(86,128,58,0.8)");
+    grad.addColorStop(0.6, "rgba(74,116,52,0.4)");
+    grad.addColorStop(1, "rgba(74,116,52,0)");
+    g.fillStyle = grad;
+    g.beginPath();
+    g.arc(mx, my, rr, 0, Math.PI * 2);
+    g.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+// ---------------------------------------------------------------------------
+// Fase 11 — Arco de ruina (la firma de la saga, fotograma MUNDO): arco de
+// sillería clara con juntas oscuras, MUSGO en juntas/cornisas y una GEMA
+// ROMBOIDAL azul emisiva incrustada en la clave (≥1.2 → entra en bloom).
+// Cada bioma lo traduce con `stone`/`mossColor`/`trimEmissive` (marco tecno),
+// pero la gema azul se repite en los 7 mundos como landmark.
+// Bloques y musgo instanciados: ~6 draw calls por arco.
+// ---------------------------------------------------------------------------
+export type KitArcoRuinaProps = {
+  x: number;
+  z: number;
+  y?: number;
+  rotY?: number;
+  scale?: number;
+  stone?: string;
+  stoneDark?: string;
+  /** Gema de la clave: azul de la saga por defecto, en TODOS los mundos. */
+  gemColor?: string;
+  gemIntensity?: number;
+  mossColor?: string;
+  /** 0..1: cuánta vida ha reclamado la ruina. */
+  mossAmount?: number;
+  /** Cartas de hiedra colgando (follaje con alphaTest, exento del toon). */
+  ivy?: boolean;
+  /** Franja emisiva del marco (variante tecno: laboratorio, algoritmos…). */
+  trimEmissive?: string;
+  seed?: number;
+  /** Colliders en los pilares (el vano queda libre, ~3.2 u de ancho). */
+  solid?: boolean;
+};
+
+export function KitArcoRuina({
+  x,
+  z,
+  y = 0,
+  rotY = 0,
+  scale = 1,
+  stone = "#a8a48e",
+  stoneDark = "#6f7462",
+  gemColor = "#38bdf8",
+  gemIntensity = 1.6,
+  mossColor = "#4a7a3f",
+  mossAmount = 1,
+  ivy = false,
+  trimEmissive,
+  seed = 401,
+  solid = true,
+}: KitArcoRuinaProps) {
+  const tex = useMemo(() => makeMasonryTexture(seed, 0.35 + mossAmount * 0.5), [seed, mossAmount]);
+  const ivyTex = useMemo(() => (ivy ? makeFoliageTexture(seed + 3) : null), [ivy, seed]);
+  const { blocks, moss, ivies } = useMemo(() => {
+    const rnd = mulberry32(seed + 7);
+    const blocks: { p: [number, number, number]; e: [number, number, number]; s: [number, number, number]; dark: number }[] = [];
+    // Pilares: base + 3 sillares con vaivén + capitel (cornisa).
+    for (const side of [-1, 1]) {
+      const px = side * 2;
+      blocks.push({ p: [px, 0.2, 0], e: [0, 0, 0], s: [1.22, 0.4, 1.22], dark: 0.55 });
+      for (let k = 0; k < 3; k++) {
+        blocks.push({
+          p: [px + (rnd() - 0.5) * 0.09, 0.92 + k, (rnd() - 0.5) * 0.09],
+          e: [0, (rnd() - 0.5) * 0.1, 0],
+          s: [0.84, 1.04, 0.84],
+          dark: rnd() * 0.35,
+        });
+      }
+      blocks.push({ p: [px, 3.58, 0], e: [0, 0, 0], s: [1.1, 0.32, 1.1], dark: 0.5 });
+    }
+    // Dovelas del arco (6, dejando la corona a la clave).
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI * (i + 0.5)) / 6;
+      blocks.push({
+        p: [Math.cos(a) * 2, 3.72 + Math.sin(a) * 1.52, 0],
+        e: [0, 0, a - Math.PI / 2],
+        s: [0.7, 0.96, 0.8],
+        dark: rnd() * 0.3,
+      });
+    }
+    // Clave con la gema.
+    blocks.push({ p: [0, 5.44, 0], e: [0, 0, 0], s: [0.82, 0.86, 0.88], dark: 0.12 });
+    // Musgo: anclas en cornisas, dovelas y juntas de los pilares.
+    const anchors: [number, number, number][] = [
+      [-2, 3.78, 0.2], [2, 3.78, -0.2], [0, 5.92, 0.1],
+      [-1.55, 4.95, 0.25], [1.55, 4.95, -0.25], [-0.8, 5.6, -0.2], [0.8, 5.6, 0.2],
+      [-2.35, 0.44, 0.3], [2.35, 0.44, -0.3], [-2.2, 1.42, 0.34], [2.2, 2.42, 0.34],
+      [-2.2, 2.42, -0.34], [2.2, 1.42, -0.34],
+    ];
+    const mossN = Math.round(anchors.length * Math.min(1, mossAmount));
+    const moss = Array.from({ length: mossN }, (_, i) => {
+      const a = anchors[i % anchors.length];
+      return {
+        p: [a[0] + (rnd() - 0.5) * 0.2, a[1], a[2] + (rnd() - 0.5) * 0.15] as [number, number, number],
+        s: 0.7 + rnd() * 0.7,
+        rot: rnd() * Math.PI,
+      };
+    });
+    // Hiedra: cartas colgando del intradós y trepando por los pilares.
+    const ivies = ivy
+      ? [
+          { p: [-1.05, 3.35, 0.24] as [number, number, number], rotY: 0.4 + rnd() * 0.5, s: 1.1 + rnd() * 0.4 },
+          { p: [1.1, 3.5, -0.2] as [number, number, number], rotY: -0.6 - rnd() * 0.5, s: 0.9 + rnd() * 0.4 },
+          { p: [-2.5, 1.7, 0.15] as [number, number, number], rotY: 1.1 + rnd() * 0.6, s: 1.2 + rnd() * 0.5 },
+          { p: [2.5, 2.1, -0.15] as [number, number, number], rotY: -1.2 - rnd() * 0.6, s: 1 + rnd() * 0.5 },
+        ]
+      : [];
+    return { blocks, moss, ivies };
+  }, [seed, mossAmount, ivy]);
+  const ivyColor = useMemo(() => new THREE.Color(mossColor).lerp(new THREE.Color("#ffffff"), 0.3), [mossColor]);
+  return (
+    <group position={[x, y, z]} rotation={[0, rotY, 0]}>
+      {solid && (
+        <RigidBody type="fixed" colliders={false}>
+          {[-1, 1].map((side) => (
+            <CuboidCollider key={side} args={[0.62 * scale, 1.9 * scale, 0.62 * scale]} position={[side * 2 * scale, 1.9 * scale, 0]} />
+          ))}
+        </RigidBody>
+      )}
+      <group scale={scale}>
+        <instancedMesh
+          ref={(m) => {
+            if (!m) return;
+            const M = new THREE.Matrix4();
+            const p = new THREE.Vector3();
+            const q = new THREE.Quaternion();
+            const e = new THREE.Euler();
+            const s = new THREE.Vector3();
+            const ca = new THREE.Color(stone);
+            const cb = new THREE.Color(stoneDark);
+            const tmp = new THREE.Color();
+            blocks.forEach((b, i) => {
+              p.set(...b.p);
+              e.set(...b.e);
+              q.setFromEuler(e);
+              s.set(...b.s);
+              M.compose(p, q, s);
+              m.setMatrixAt(i, M);
+              tmp.copy(ca).lerp(cb, b.dark);
+              m.setColorAt(i, tmp);
+            });
+            m.instanceMatrix.needsUpdate = true;
+            if (m.instanceColor) m.instanceColor.needsUpdate = true;
+          }}
+          args={[undefined, undefined, blocks.length]}
+          castShadow
+          receiveShadow
+        >
+          <boxGeometry args={[1, 1, 1]} />
+          <meshStandardMaterial map={tex} flatShading roughness={0.95} />
+        </instancedMesh>
+        {moss.length > 0 && (
+          <instancedMesh
+            ref={(m) => {
+              if (!m) return;
+              const M = new THREE.Matrix4();
+              const p = new THREE.Vector3();
+              const q = new THREE.Quaternion();
+              const s = new THREE.Vector3();
+              moss.forEach((b, i) => {
+                p.set(...b.p);
+                q.setFromEuler(new THREE.Euler(0, b.rot, 0));
+                s.set(0.34 * b.s, 0.13 * b.s, 0.3 * b.s);
+                M.compose(p, q, s);
+                m.setMatrixAt(i, M);
+              });
+              m.instanceMatrix.needsUpdate = true;
+            }}
+            args={[undefined, undefined, moss.length]}
+          >
+            <sphereGeometry args={[1, 7, 5]} />
+            <meshStandardMaterial color={mossColor} flatShading roughness={1} />
+          </instancedMesh>
+        )}
+        {/* Gema romboidal de la clave, incrustada a ambas caras. */}
+        {[0.48, -0.48].map((gz) => (
+          <mesh key={gz} position={[0, 5.44, gz]} scale={[0.62, 1.12, 0.62]}>
+            <octahedronGeometry args={[0.5, 0]} />
+            <meshStandardMaterial color={gemColor} emissive={gemColor} emissiveIntensity={gemIntensity} flatShading roughness={0.25} />
+          </mesh>
+        ))}
+        {trimEmissive && (
+          <group>
+            {[-1, 1].map((side) => (
+              <mesh key={side} position={[side * 2, 1.95, 0.46]}>
+                <boxGeometry args={[0.07, 3, 0.06]} />
+                <meshStandardMaterial color={trimEmissive} emissive={trimEmissive} emissiveIntensity={1.2} roughness={0.4} />
+              </mesh>
+            ))}
+            <mesh position={[0, 3.68, 0.3]}>
+              <boxGeometry args={[3.3, 0.06, 0.06]} />
+              <meshStandardMaterial color={trimEmissive} emissive={trimEmissive} emissiveIntensity={1.2} roughness={0.4} />
+            </mesh>
+          </group>
+        )}
+        {ivyTex &&
+          ivies.map((v, i) => (
+            <mesh key={i} position={v.p} rotation={[0, v.rotY, 0]} scale={v.s}>
+              <planeGeometry args={[0.95, 1.35]} />
+              <meshStandardMaterial map={ivyTex} color={ivyColor} alphaTest={0.45} side={THREE.DoubleSide} roughness={1} />
+            </mesh>
+          ))}
+      </group>
+    </group>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Fase 11 — Plaza de losas (fotograma MUNDO): parche de losas de piedra con
+// hierba brotando entre las juntas, para el suelo alrededor de los hitos.
+// Geometrías estándar de three (cilindros achatados), NADA de triangulación
+// manual (histórico de bug de winding). Un solo instancedMesh para TODAS las
+// plazas del mundo (+1 pequeño para las matas): 2 draw calls.
+// Las losas asoman ≤0.08 (la física sigue siendo un plano).
+// ---------------------------------------------------------------------------
+export type PlazaSpot = { x: number; z: number; r?: number; inner?: number };
+
+export function KitPlazaLosas({
+  seed,
+  spots,
+  heightFn,
+  stone = "#9a947f",
+  stoneDark = "#6f7462",
+  grassColor = "#5a8a4a",
+  radius = 3.8,
+  innerRadius = 0.9,
+  grassChance = 0.4,
+}: {
+  seed: number;
+  spots: PlazaSpot[];
+  heightFn: (x: number, z: number) => number;
+  stone?: string;
+  stoneDark?: string;
+  /** Hierba entre las juntas (y tinte de las losas tomadas por el musgo). */
+  grassColor?: string;
+  radius?: number;
+  innerRadius?: number;
+  grassChance?: number;
+}) {
+  const { slabs, tufts } = useMemo(() => {
+    const rnd = mulberry32(seed);
+    const ca = new THREE.Color(stone);
+    const cb = new THREE.Color(stoneDark);
+    const cg = new THREE.Color(grassColor);
+    const white = new THREE.Color("#ffffff");
+    const slabs: { m: THREE.Matrix4; c: THREE.Color }[] = [];
+    const tufts: { m: THREE.Matrix4; c: THREE.Color }[] = [];
+    const M = new THREE.Matrix4();
+    const p = new THREE.Vector3();
+    const q = new THREE.Quaternion();
+    const e = new THREE.Euler();
+    const s = new THREE.Vector3();
+    for (const spot of spots) {
+      const R = spot.r ?? radius;
+      const R0 = spot.inner ?? innerRadius;
+      for (let ring = R0 + 0.55; ring < R; ring += 1.02) {
+        const n = Math.max(6, Math.round((Math.PI * 2 * ring) / 1.06));
+        const a0 = rnd() * Math.PI;
+        for (let i = 0; i < n; i++) {
+          if (rnd() < 0.13) continue; // losa perdida: el desgaste cuenta historia
+          const a = a0 + (i / n) * Math.PI * 2;
+          const px = spot.x + Math.cos(a) * (ring + (rnd() - 0.5) * 0.22);
+          const pz = spot.z + Math.sin(a) * (ring + (rnd() - 0.5) * 0.22);
+          const sc = 0.4 + rnd() * 0.15;
+          p.set(px, heightFn(px, pz) + 0.03, pz);
+          q.setFromEuler(e.set(0, rnd() * Math.PI, 0));
+          s.set(sc, 0.09, sc * (0.85 + rnd() * 0.3));
+          M.compose(p, q, s);
+          const c = ca.clone().lerp(cb, rnd());
+          if (rnd() < 0.16) c.lerp(cg, 0.42); // losa reclamada por el musgo
+          slabs.push({ m: M.clone(), c });
+          // Mata de hierba en la junta contigua.
+          if (rnd() < grassChance) {
+            const ga = a + 0.55 / ring;
+            const gx = spot.x + Math.cos(ga) * (ring + (rnd() - 0.5) * 0.6);
+            const gz = spot.z + Math.sin(ga) * (ring + (rnd() - 0.5) * 0.6);
+            const gs = 0.55 + rnd() * 0.65;
+            p.set(gx, heightFn(gx, gz) + 0.16 * gs, gz);
+            q.setFromEuler(e.set((rnd() - 0.5) * 0.24, rnd() * Math.PI, (rnd() - 0.5) * 0.24));
+            s.set(0.12 * gs, 0.36 * gs, 0.12 * gs);
+            M.compose(p, q, s);
+            tufts.push({ m: M.clone(), c: cg.clone().lerp(white, rnd() * 0.35) });
+          }
+        }
+      }
+    }
+    return { slabs, tufts };
+  }, [seed, spots, heightFn, stone, stoneDark, grassColor, radius, innerRadius, grassChance]);
+  const setup = (m: THREE.InstancedMesh | null, list: { m: THREE.Matrix4; c: THREE.Color }[]) => {
+    if (!m) return;
+    list.forEach((it, i) => {
+      m.setMatrixAt(i, it.m);
+      m.setColorAt(i, it.c);
+    });
+    m.instanceMatrix.needsUpdate = true;
+    if (m.instanceColor) m.instanceColor.needsUpdate = true;
+  };
+  return (
+    <group>
+      <instancedMesh ref={(m) => setup(m, slabs)} args={[undefined, undefined, slabs.length]} receiveShadow>
+        <cylinderGeometry args={[1, 1.12, 1, 6]} />
+        <meshStandardMaterial flatShading roughness={1} />
+      </instancedMesh>
+      {tufts.length > 0 && (
+        <instancedMesh ref={(m) => setup(m, tufts)} args={[undefined, undefined, tufts.length]}>
+          <coneGeometry args={[1, 1, 5]} />
+          <meshStandardMaterial flatShading roughness={1} />
+        </instancedMesh>
+      )}
+    </group>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Masa instanciada genérica: distribuye una geometría por el mapa evitando la
 // senda, el cruce y un radio central. Para púas, cristales, corales, setas…
 // ---------------------------------------------------------------------------

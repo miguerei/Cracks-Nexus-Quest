@@ -16,6 +16,7 @@ import { ObstacleShells } from "./environmentExtras";
 import {
   buildCurve,
   FlowPlane,
+  KitArcoRuina,
   KitBankRocks,
   KitFarFog,
   KitGround,
@@ -24,6 +25,7 @@ import {
   KitParticles,
   KitPath,
   KitPedestal,
+  KitPlazaLosas,
   KitPortalFrame,
   KitScatter,
   KitSealedZone,
@@ -273,6 +275,35 @@ export default function LaboratorioEnvironment() {
       <CristalColosal x={13.5} z={-16} h={5.5} color="#f0a8d8" rotY={2.8} />
       {/* Alambiques junto al cristal 3 [5,-5]. */}
       <MesaAlambiques x={8.2} z={-4} rotY={-0.5} />
+      {/* Fase 11 — firma de la saga traducida al bioma: marco tecno-arcano de
+          piedra violeta con franjas emisivas, musgo fosforescente en las
+          juntas y la gema azul de la saga en la clave, junto al portal. */}
+      <KitArcoRuina
+        x={15}
+        z={-12}
+        rotY={-0.8}
+        stone="#5c4488"
+        stoneDark="#3a2b58"
+        mossColor="#3fae8a"
+        mossAmount={0.5}
+        trimEmissive="#c084fc"
+        gemColor="#7dd3fc"
+        seed={SEED + 30}
+      />
+      {/* Fase 11 — plazas de losas con musgo luminoso entre juntas: sala de
+          cristales, claro social y portal. */}
+      <KitPlazaLosas
+        seed={SEED + 31}
+        heightFn={heightFn}
+        stone="#4a3670"
+        stoneDark="#3a2b58"
+        grassColor="#3fae8a"
+        spots={[
+          { x: -7, z: -1 },
+          { x: -0.5, z: -10.5, r: 3.4 },
+          { x: 10, z: -14, r: 3 },
+        ]}
+      />
       {LAYOUT.missionSpots.slice(0, 4).map(([sx, sz], i) => (
         <KitPedestal key={i} x={sx} z={sz} stone="#4a3670" stoneDark="#3a2b58" ringColor="#c084fc" ringIntensity={1.35} />
       ))}

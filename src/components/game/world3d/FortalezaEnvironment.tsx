@@ -23,6 +23,7 @@ import { ObstacleShells } from "./environmentExtras";
 import {
   buildCurve,
   FlowPlane,
+  KitArcoRuina,
   KitBankRocks,
   KitFarFog,
   KitGround,
@@ -31,6 +32,7 @@ import {
   KitParticles,
   KitPath,
   KitPedestal,
+  KitPlazaLosas,
   KitPortalFrame,
   KitScatter,
   KitSealedZone,
@@ -436,6 +438,35 @@ export default function FortalezaEnvironment() {
       <Colmillo x={-6.5} z={-22.5} h={8} rotY={0.9} phase={2.8} />
       <Colmillo x={6.5} z={-23.5} h={8.5} rotY={2.4} tilt={-0.14} phase={1.1} />
       <TronoDelVacio x={0} z={-24.6} />
+      {/* Fase 11 — firma de la saga traducida a la muralla: arco de sillería
+          de obsidiana tomado por el liquen del Vacío… pero la gema de la
+          clave sigue siendo AZUL (el conocimiento resiste incluso aquí). */}
+      <KitArcoRuina
+        x={17.5}
+        z={-13}
+        rotY={-0.85}
+        scale={1.2}
+        stone="#302344"
+        stoneDark="#1c1226"
+        mossColor="#463a66"
+        mossAmount={0.6}
+        gemIntensity={1.4}
+        seed={SEED + 30}
+      />
+      {/* Fase 11 — plazas de losas del patio con brotes del Vacío entre las
+          juntas: fauces, refugio y portal. */}
+      <KitPlazaLosas
+        seed={SEED + 31}
+        heightFn={heightFn}
+        stone="#302344"
+        stoneDark="#1c1226"
+        grassColor="#5b2d8a"
+        spots={[
+          { x: -8, z: -1, r: 3.6 },
+          { x: -0.5, z: -13, r: 4 },
+          { x: 14, z: -17, r: 3 },
+        ]}
+      />
       {LAYOUT.missionSpots.slice(0, 4).map(([sx, sz], i) => (
         <KitPedestal key={i} x={sx} z={sz} stone="#302344" stoneDark="#241a30" ringColor="#f43f5e" ringIntensity={1.5} />
       ))}

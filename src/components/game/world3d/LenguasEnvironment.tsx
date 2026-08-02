@@ -17,6 +17,7 @@ import { Flock, ObstacleShells } from "./environmentExtras";
 import {
   buildCurve,
   FlowPlane,
+  KitArcoRuina,
   KitBankRocks,
   KitFarFog,
   KitGround,
@@ -25,6 +26,7 @@ import {
   KitParticles,
   KitPath,
   KitPedestal,
+  KitPlazaLosas,
   KitPortalFrame,
   KitScatter,
   KitSealedZone,
@@ -198,12 +200,14 @@ export default function LenguasEnvironment() {
         ]}
         cloudSeed={SEED + 20}
       />
-      {/* Islotes lejanos asomando sobre el mar. */}
+      {/* Islotes lejanos asomando sobre el mar (Fase 11: tercer plano de
+          islas mayores fundidas en la bruma marina). */}
       <KitSkyline
         seed={SEED + 1}
         rings={[
           { count: 12, radius: 46, spread: 12, hMin: 4, hMax: 9, rMin: 4, rMax: 8, color: "#4a8a6e", sides: 6, sink: 3.6 },
           { count: 9, radius: 64, spread: 14, hMin: 6, hMax: 12, rMin: 5, rMax: 9, color: "#3a6e5e", sides: 5, sink: 4.5 },
+          { count: 8, radius: 88, spread: 18, hMin: 9, hMax: 17, rMin: 8, rMax: 13, color: "#2f5a4e", sides: 5, sink: 6 },
         ]}
       />
       <KitGround half={HALF} heightFn={heightFn} colorFn={groundColor} detailStyle="hierba" detailSeed={SEED + 21} detailRepeat={28} />
@@ -250,6 +254,33 @@ export default function LenguasEnvironment() {
       <FaroRuna x={-20} z={17} h={4.5} solid />
       <FaroRuna x={20.5} z={-7} h={5} solid />
       <FaroRuna x={-20.5} z={-9.5} h={4} solid />
+      {/* Fase 11 — firma de la saga: arco de sillería encalada por la marea,
+          musgo y hiedra salobre en las juntas, gema azul en la clave. Vela el
+          camino entre el faro mayor y el claro. */}
+      <KitArcoRuina
+        x={11.5}
+        z={-7.5}
+        rotY={1.2}
+        stone="#c8bfa8"
+        stoneDark="#8a9a8a"
+        mossColor="#3f8a5c"
+        ivy
+        seed={SEED + 30}
+      />
+      {/* Fase 11 — plazas de losas con hierba de marea entre juntas: faro
+          mayor, claro social y portal. */}
+      <KitPlazaLosas
+        seed={SEED + 31}
+        heightFn={heightFn}
+        stone="#c8bfa8"
+        stoneDark="#8a9a8a"
+        grassColor="#5aa072"
+        spots={[
+          { x: 8, z: -1, r: 3.6 },
+          { x: 0.5, z: -12.5 },
+          { x: -13, z: -16, r: 3.2 },
+        ]}
+      />
       {LAYOUT.missionSpots.slice(0, 4).map(([sx, sz], i) => (
         <KitPedestal key={i} x={sx} z={sz} stone="#c8bfa8" stoneDark="#8a9a8a" ringColor="#2dd4bf" ringIntensity={1.35} />
       ))}
@@ -302,8 +333,9 @@ export default function LenguasEnvironment() {
         color="#fff4d6"
         opacity={0.065}
       />
-      {/* Fase 7: bruma de mar abierto sobre el agua lejana. */}
-      <KitFarFog seed={SEED + 16} color="#c8ecec" radius={HALF + 10} y={1.6} opacity={0.1} />
+      {/* Fase 7: bruma de mar abierto sobre el agua lejana (Fase 11: +densa
+          entre los planos de islotes). */}
+      <KitFarFog seed={SEED + 16} color="#c8ecec" count={10} radius={HALF + 10} y={1.6} opacity={0.12} />
       {/* Bruma marina + Bruma del Vacío en altar y cala sellada. */}
       <KitGroundFog
         seed={SEED + 13}

@@ -16,6 +16,7 @@ import { ObstacleShells } from "./environmentExtras";
 import {
   buildCurve,
   FlowPlane,
+  KitArcoRuina,
   KitBankRocks,
   KitFarFog,
   KitGround,
@@ -24,6 +25,7 @@ import {
   KitParticles,
   KitPath,
   KitPedestal,
+  KitPlazaLosas,
   KitPortalFrame,
   KitScatter,
   KitSealedZone,
@@ -256,12 +258,14 @@ export default function AlgoritmosEnvironment() {
         ]}
         cloudSeed={SEED + 20}
       />
-      {/* Skyline: dos anillos de torres de datos con ventanas cian. */}
+      {/* Skyline: tres anillos de torres de datos con ventanas cian (Fase 11:
+          megatorres al fondo para el tercer plano de profundidad). */}
       <KitSkyline
         seed={SEED + 1}
         rings={[
           { count: 16, radius: 44, spread: 14, hMin: 12, hMax: 26, rMin: 2.4, rMax: 4.4, color: "#1d3050", kind: "box", emissive: "#38bdf8", emissiveIntensity: 0.32 },
           { count: 14, radius: 68, spread: 20, hMin: 18, hMax: 36, rMin: 3.5, rMax: 6, color: "#16263e", kind: "box", emissive: "#2563b0", emissiveIntensity: 0.22 },
+          { count: 10, radius: 96, spread: 26, hMin: 26, hMax: 48, rMin: 6, rMax: 10, color: "#101c30", kind: "box", emissive: "#1d4ed8", emissiveIntensity: 0.16 },
         ]}
       />
       <KitGround half={HALF} heightFn={heightFn} colorFn={groundColor} detailStyle="placa" detailSeed={SEED + 21} detailRepeat={24} />
@@ -317,6 +321,35 @@ export default function AlgoritmosEnvironment() {
       <HoloPillar x={4} z={-9.5} phase={0.4} />
       <HoloPillar x={9} z={-3.5} phase={0.7} />
       <HoloPillar x={-12} z={2} phase={0.2} />
+      {/* Fase 11 — firma de la saga traducida al bioma: marco tecno de
+          sillería azulada con franjas cian y la MISMA gema azul en la clave,
+          guardando el camino del portal. */}
+      <KitArcoRuina
+        x={15.5}
+        z={-18.5}
+        rotY={-0.7}
+        stone="#3a5a86"
+        stoneDark="#22405e"
+        mossColor="#3f8a6e"
+        mossAmount={0.35}
+        trimEmissive="#38bdf8"
+        gemColor="#7dd3fc"
+        seed={SEED + 30}
+      />
+      {/* Fase 11 — plazas de losas con brotes entre juntas en los hitos:
+          foro de torres, claro social y portal. */}
+      <KitPlazaLosas
+        seed={SEED + 31}
+        heightFn={heightFn}
+        stone="#2c4468"
+        stoneDark="#1d3050"
+        grassColor="#2f8a6e"
+        spots={[
+          { x: -8, z: -1 },
+          { x: 0, z: -12.3 },
+          { x: 12, z: -16, r: 3.2 },
+        ]}
+      />
       {/* Nodos anclados al mundo: pedestales, altar, sellado y portal. */}
       {LAYOUT.missionSpots.slice(0, 4).map(([sx, sz], i) => (
         <KitPedestal key={i} x={sx} z={sz} stone="#2c4468" stoneDark="#1d3050" ringColor="#38bdf8" ringIntensity={1.35} />
@@ -371,8 +404,9 @@ export default function AlgoritmosEnvironment() {
         color="#bfe4ff"
         opacity={0.06}
       />
-      {/* Fase 7: niebla de distancia baja en el perímetro. */}
-      <KitFarFog seed={SEED + 16} color="#9fc8f0" radius={HALF + 9} y={2.2} opacity={0.08} />
+      {/* Fase 7: niebla de distancia baja en el perímetro (Fase 11: +densa,
+          la bruma azul aérea entre los planos del skyline). */}
+      <KitFarFog seed={SEED + 16} color="#9fc8f0" count={10} radius={HALF + 9} y={2.2} opacity={0.1} />
       {/* Niebla del Vacío en el altar y el nodo corrupto sellado. */}
       <KitGroundFog
         seed={SEED + 12}

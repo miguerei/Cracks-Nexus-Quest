@@ -17,6 +17,7 @@ import { ObstacleShells } from "./environmentExtras";
 import {
   buildCurve,
   FlowPlane,
+  KitArcoRuina,
   KitBankRocks,
   KitFarFog,
   KitGround,
@@ -25,6 +26,7 @@ import {
   KitParticles,
   KitPath,
   KitPedestal,
+  KitPlazaLosas,
   KitPortalFrame,
   KitScatter,
   KitSealedZone,
@@ -299,6 +301,35 @@ export default function ObservatorioEnvironment() {
       />
       <GranTelescopio x={11.5} z={0.5} />
       <SueloConstelaciones cx={LAYOUT.missionSpots[2][0]} cz={LAYOUT.missionSpots[2][1]} />
+      {/* Fase 11 — firma de la saga: arco de sillería índigo con liquen
+          plateado, franjas astrales y la gema azul de la clave, presentando
+          el gran telescopio. */}
+      <KitArcoRuina
+        x={13}
+        z={-4}
+        rotY={0.9}
+        stone="#4a5292"
+        stoneDark="#2a2e52"
+        mossColor="#5a6ab0"
+        mossAmount={0.45}
+        trimEmissive="#818cf8"
+        gemColor="#7dd3fc"
+        seed={SEED + 30}
+      />
+      {/* Fase 11 — plazas de losas con brotes astrales entre juntas:
+          telescopio, claro social y portal. */}
+      <KitPlazaLosas
+        seed={SEED + 31}
+        heightFn={heightFn}
+        stone="#3c4278"
+        stoneDark="#2a2e52"
+        grassColor="#55689e"
+        spots={[
+          { x: 8, z: -2, r: 3.6 },
+          { x: 0, z: -12.7, r: 3.4 },
+          { x: 13, z: -15, r: 3 },
+        ]}
+      />
       {LAYOUT.missionSpots.slice(0, 4).map(([sx, sz], i) => (
         <KitPedestal key={i} x={sx} z={sz} stone="#3c4278" stoneDark="#2a2e52" ringColor="#a5b4fc" ringIntensity={1.4} />
       ))}

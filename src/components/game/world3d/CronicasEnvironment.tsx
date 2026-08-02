@@ -16,6 +16,7 @@ import { ObstacleShells } from "./environmentExtras";
 import {
   buildCurve,
   FlowPlane,
+  KitArcoRuina,
   KitBankRocks,
   KitFarFog,
   KitGround,
@@ -24,6 +25,7 @@ import {
   KitParticles,
   KitPath,
   KitPedestal,
+  KitPlazaLosas,
   KitPortalFrame,
   KitScatter,
   KitSealedZone,
@@ -247,12 +249,14 @@ export default function CronicasEnvironment() {
         ]}
         cloudSeed={SEED + 20}
       />
-      {/* Horizonte: dunas suaves y mesetas lejanas doradas. */}
+      {/* Horizonte: dunas suaves, mesetas doradas y (Fase 11) un tercer plano
+          de mesas colosales fundidas en la calima. */}
       <KitSkyline
         seed={SEED + 1}
         rings={[
           { count: 15, radius: 52, spread: 18, hMin: 6, hMax: 12, rMin: 9, rMax: 16, color: "#caa268", sides: 6, sink: 5 },
           { count: 10, radius: 80, spread: 22, hMin: 9, hMax: 17, rMin: 8, rMax: 14, color: "#b8905a", kind: "box", sink: 7 },
+          { count: 8, radius: 108, spread: 26, hMin: 14, hMax: 26, rMin: 12, rMax: 20, color: "#a3764a", kind: "box", sink: 9 },
         ]}
       />
       <KitGround half={HALF} heightFn={heightFn} colorFn={groundColor} detailStyle="arena" detailSeed={SEED + 21} detailRepeat={30} />
@@ -291,6 +295,44 @@ export default function CronicasEnvironment() {
       <Estandarte x={3.5} z={21.5} phase={0.6} />
       <Estandarte x={-6.5} z={22.5} phase={1.8} />
       <Estandarte x={16} z={-8} phase={2.4} />
+      {/* Fase 11 — firma de la saga: arcos de sillería dorada con la gema
+          azul en la clave. Uno recibe la caravana en la entrada y otro vela
+          el portal, con musgo seco de oasis en las juntas. */}
+      <KitArcoRuina
+        x={7.5}
+        z={19.5}
+        rotY={0.5}
+        stone="#d4b078"
+        stoneDark="#a3764a"
+        mossColor="#8a8a4e"
+        mossAmount={0.55}
+        seed={SEED + 30}
+      />
+      <KitArcoRuina
+        x={-18.5}
+        z={-21.5}
+        rotY={0.75}
+        scale={0.92}
+        stone="#c9a25e"
+        stoneDark="#a3764a"
+        mossColor="#8f8050"
+        mossAmount={0.45}
+        seed={SEED + 31}
+      />
+      {/* Fase 11 — plazas de losas medio tragadas por la arena, con hierba
+          seca entre juntas: obeliscos, oasis y portal. */}
+      <KitPlazaLosas
+        seed={SEED + 32}
+        heightFn={heightFn}
+        stone="#c9a25e"
+        stoneDark="#a3764a"
+        grassColor="#8f8050"
+        spots={[
+          { x: 9, z: -1, inner: 1.3, r: 4 },
+          { x: 0, z: -14.5 },
+          { x: -15, z: -19, r: 3.2 },
+        ]}
+      />
       {LAYOUT.missionSpots.slice(0, 4).map(([sx, sz], i) => (
         <KitPedestal key={i} x={sx} z={sz} stone="#c9a25e" stoneDark="#a3764a" ringColor="#f4c542" ringIntensity={1.3} />
       ))}

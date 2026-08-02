@@ -14,6 +14,7 @@ import { useFrame } from "@react-three/fiber";
 import { CuboidCollider, CylinderCollider, RigidBody } from "@react-three/rapier";
 import * as THREE from "three";
 
+import { KitArcoRuina, KitPlazaLosas } from "./environmentKit";
 import { BOSQUE_BRIDGE, BOSQUE_RIVER, getWorldLayout, scaleCount } from "./worldConfig";
 
 const HALF = getWorldLayout("bosque").groundHalf;
@@ -1165,6 +1166,9 @@ const STONE_DARK = "#6f7462";
 
 function Ruins({ x, z }: { x: number; z: number }) {
   const rnd = useMemo(() => mulberry32(47), []);
+  // Fase 11: la ruina está VIVA — hiedra (cartas con alphaTest, exentas del
+  // toon) y musgo extra en cornisas y dais, como en el fotograma canon.
+  const ivyTex = useMemo(() => makeFoliageTexture(212), []);
   const columns = useMemo(
     () =>
       Array.from({ length: 6 }, (_, i) => {
@@ -1234,7 +1238,29 @@ function Ruins({ x, z }: { x: number; z: number }) {
             <sphereGeometry args={[0.6, 8, 6]} />
             <meshStandardMaterial color="#3f7a3f" flatShading roughness={1} />
           </mesh>
+          {/* Fase 11: musgo coronando el fuste/capitel y hiedra trepando. */}
+          <mesh position={[-0.14, c.h + (c.broken ? 0.42 : 0.46), 0.12]} scale={[0.42, 0.16, 0.38]}>
+            <sphereGeometry args={[0.6, 7, 5]} />
+            <meshStandardMaterial color="#4a8a44" flatShading roughness={1} />
+          </mesh>
+          {i % 2 === 0 && (
+            <mesh position={[0.34, c.h * 0.45, -0.3]} rotation={[0, 1.1 + i * 0.8, 0]} scale={0.8 + c.h * 0.14}>
+              <planeGeometry args={[0.85, 1.25]} />
+              <meshStandardMaterial map={ivyTex} color="#5f9a4c" alphaTest={0.45} side={THREE.DoubleSide} roughness={1} />
+            </mesh>
+          )}
         </group>
+      ))}
+      {/* Fase 11: musgo en el borde del dais (la piedra vieja respira). */}
+      {[0.6, 2.2, 3.9, 5.3].map((a, i) => (
+        <mesh
+          key={`dm-${i}`}
+          position={[Math.cos(a) * 2.55, 0.16, Math.sin(a) * 2.55]}
+          scale={[0.55 + (i % 2) * 0.2, 0.14, 0.5]}
+        >
+          <sphereGeometry args={[0.6, 7, 5]} />
+          <meshStandardMaterial color="#3f7a3f" flatShading roughness={1} />
+        </mesh>
       ))}
       {/* Columna caída atravesada en el suelo. */}
       <group position={[3.2, 0.42, 3.4]} rotation={[0, 0.7, Math.PI / 2 - 0.06]}>
@@ -1267,6 +1293,19 @@ function Ruins({ x, z }: { x: number; z: number }) {
           <boxGeometry args={[0.6, 0.34, 0.5]} />
           <meshStandardMaterial color="#3ee08f" emissive="#3ee08f" emissiveIntensity={1.6} />
         </mesh>
+        {/* Fase 11: musgo en la cornisa del dintel + hiedra colgando del vano. */}
+        {[-1.3, 0.5, 1.4].map((sx, i) => (
+          <mesh key={`lm-${i}`} position={[sx, 4.24, 0.14]} scale={[0.4 + (i % 2) * 0.16, 0.13, 0.34]}>
+            <sphereGeometry args={[0.6, 7, 5]} />
+            <meshStandardMaterial color="#4a8a44" flatShading roughness={1} />
+          </mesh>
+        ))}
+        {[-0.9, 0.8].map((sx, i) => (
+          <mesh key={`iv-${i}`} position={[sx, 3.25, 0.1]} rotation={[0, i ? -0.7 : 0.5, 0]} scale={1.05}>
+            <planeGeometry args={[0.9, 1.3]} />
+            <meshStandardMaterial map={ivyTex} color="#66a352" alphaTest={0.45} side={THREE.DoubleSide} roughness={1} />
+          </mesh>
+        ))}
       </group>
     </group>
   );
@@ -1574,6 +1613,69 @@ function Vegetation({ samples }: { samples: [number, number][] }) {
         ferns.push({ m: M.clone(), c: fernA.clone().lerp(fernB, rnd()) });
       }
       placedFerns++;
+    }
+    // Fase 11 (reposición del pase perdido): orla FRONDOSA del sendero —
+    // hierba alta y matas de helecho abrazando la ruta a 1.5-2.8 u del eje,
+    // para que caminar por el Bosque sea atravesar vegetación, no un plano.
+    const EDGE_N = scaleCount(300);
+    guard = 0;
+    let placedEdge = 0;
+    while (placedEdge < EDGE_N && guard++ < EDGE_N * 10) {
+      const i = Math.min(samples.length - 2, Math.floor(rnd() * (samples.length - 1)));
+      const [ax, az] = samples[i];
+      const [bx, bz] = samples[i + 1];
+      let nx = -(bz - az);
+      let nz = bx - ax;
+      const L = Math.hypot(nx, nz) || 1;
+      nx /= L;
+      nz /= L;
+      const side = rnd() > 0.5 ? 1 : -1;
+      const d = 1.45 + rnd() * 1.35;
+      const x = ax + nx * d * side;
+      const z = az + nz * d * side;
+      if (!inBounds(x, z)) continue;
+      if (Math.abs(z - BOSQUE_RIVER.z) < 2.8) continue;
+      if (distToPath(samples, x, z) < 1.35) continue;
+      const sc = 0.85 + rnd() * 0.75;
+      p.set(x, bosqueGroundHeight(x, z) + 0.3 * sc, z);
+      q.setFromEuler(new THREE.Euler(0, rnd() * Math.PI, 0));
+      s.set(sc, sc, sc);
+      M.compose(p, q, s);
+      grass.push(M.clone());
+      placedEdge++;
+    }
+    const EDGE_FERN_N = scaleCount(30);
+    guard = 0;
+    let placedEdgeFerns = 0;
+    while (placedEdgeFerns < EDGE_FERN_N && guard++ < EDGE_FERN_N * 12) {
+      const i = Math.min(samples.length - 2, Math.floor(rnd() * (samples.length - 1)));
+      const [ax, az] = samples[i];
+      const [bx, bz] = samples[i + 1];
+      let nx = -(bz - az);
+      let nz = bx - ax;
+      const L = Math.hypot(nx, nz) || 1;
+      nx /= L;
+      nz /= L;
+      const side = rnd() > 0.5 ? 1 : -1;
+      const d = 1.7 + rnd() * 1.2;
+      const x = ax + nx * d * side;
+      const z = az + nz * d * side;
+      if (!inBounds(x, z)) continue;
+      if (Math.abs(z - BOSQUE_RIVER.z) < 2.8) continue;
+      if (distToPath(samples, x, z) < 1.5) continue;
+      const y = bosqueGroundHeight(x, z);
+      const baseYaw = rnd() * Math.PI * 2;
+      const mata = 0.75 + rnd() * 0.6;
+      for (let k = 0; k < 3; k++) {
+        const yaw = baseYaw + (k * Math.PI * 2) / 3 + (rnd() - 0.5) * 0.5;
+        p.set(x + Math.cos(yaw) * 0.08, y, z + Math.sin(yaw) * 0.08);
+        q.setFromEuler(new THREE.Euler(-0.22 - rnd() * 0.18, yaw, 0, "YXZ"));
+        const sc = mata * (0.85 + rnd() * 0.3);
+        s.set(sc, sc, sc);
+        M.compose(p, q, s);
+        ferns.push({ m: M.clone(), c: fernA.clone().lerp(fernB, rnd()) });
+      }
+      placedEdgeFerns++;
     }
     // Flores de luz cerca del claro (bloom).
     for (let i = 0; i < 12; i++) {
@@ -2062,6 +2164,25 @@ export default function BosqueEnvironment() {
       <Ruins x={8} z={-1} />
       <GuardianStatue x={-2.9} z={23.6} face={0.5} />
       <GuardianStatue x={2.9} z={23.6} face={-0.5} />
+      {/* Fase 11 — firma de la saga: arcos de sillería con gema azul en la
+          clave. Uno recibe al jugador en la entrada (la senda pasa por el
+          vano) y otro guarda el camino del portal. */}
+      <KitArcoRuina x={-1.2} z={20.4} rotY={0.38} stone="#9aa08c" stoneDark="#6f7462" mossColor="#3f7a3f" ivy seed={481} />
+      <KitArcoRuina x={-16.5} z={-13.5} rotY={0.9} scale={0.9} stone="#9aa08c" stoneDark="#6f7462" mossColor="#4a8a44" ivy seed={487} />
+      {/* Fase 11 — plazas de losas con hierba entre juntas en los hitos:
+          ruinas, claro social y portal (2 draw calls en total). */}
+      <KitPlazaLosas
+        seed={491}
+        heightFn={bosqueGroundHeight}
+        stone="#8d927e"
+        stoneDark="#6f7462"
+        grassColor="#5a9a4c"
+        spots={[
+          { x: 8, z: -1, inner: 3.1, r: 5.3 },
+          { x: 0, z: -13.4, r: 4.3 },
+          { x: -13, z: -17, r: 3.4 },
+        ]}
+      />
       {/* Raíces: dos cruzan el sendero (se saltan), el resto decoran. */}
       <Root x={-8.6} z={9.6} rotY={0.55} radius={1.5} jumpable />
       <Root x={1.5} z={-6.2} rotY={-0.5} radius={1.4} jumpable />
