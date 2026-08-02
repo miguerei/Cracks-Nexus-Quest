@@ -1380,7 +1380,7 @@ export function KitArcoRuina({
       : [];
     return { blocks, moss, ivies };
   }, [seed, mossAmount, ivy]);
-  const ivyColor = useMemo(() => new THREE.Color(mossColor).lerp(new THREE.Color("#ffffff"), 0.3), [mossColor]);
+  const ivyColor = useMemo(() => new THREE.Color(mossColor).lerp(new THREE.Color("#ffffff"), 0.52), [mossColor]);
   return (
     <group position={[x, y, z]} rotation={[0, rotY, 0]}>
       {solid && (
@@ -1449,7 +1449,7 @@ export function KitArcoRuina({
         {[0.48, -0.48].map((gz) => (
           <mesh key={gz} position={[0, 5.44, gz]} scale={[0.62, 1.12, 0.62]}>
             <octahedronGeometry args={[0.5, 0]} />
-            <meshStandardMaterial color={gemColor} emissive={gemColor} emissiveIntensity={gemIntensity} flatShading roughness={0.25} />
+            <meshStandardMaterial color="#eaf6ff" emissive={gemColor} emissiveIntensity={Math.max(2, gemIntensity)} roughness={0.15} metalness={0.3} />
           </mesh>
         ))}
         {trimEmissive && (

@@ -132,9 +132,9 @@ function OclusionAmbiental({ tier, batalla }: { tier: QualityTier; batalla: bool
       ref={pase as never}
       halfRes
       depthAwareUpsampling
-      aoRadius={1.7}
-      distanceFalloff={1.1}
-      intensity={batalla ? 2.1 : 1.7}
+      aoRadius={0.55}
+      distanceFalloff={0.6}
+      intensity={batalla ? 1.1 : 0.85}
       color="#050d1a"
       aoSamples={tier === "alta" ? 12 : 8}
       denoiseSamples={tier === "alta" ? 8 : 4}
